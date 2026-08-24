@@ -1,0 +1,569 @@
+You are a senior Python backend engineer, browser-automation engineer, and DevOps architect.
+
+Build a complete, production-oriented browser automation project with the following architecture:
+
+GITHUB + RENDER + TEXT CLIENT
+
+IMPORTANT SAFETY AND SCOPE REQUIREMENTS
+---------------------------------------
+This system is intended ONLY for websites and accounts that the operator owns or is explicitly authorized to test.
+
+Do NOT implement:
+- credential stuffing
+- brute-force login attempts
+- processing a large combo.txt containing username/password pairs
+- automatic rotation through credential lists
+- CAPTCHA solving intended to bypass anti-bot protections
+- Cloudflare bypasses, stealth mechanisms, fingerprint spoofing, or anti-bot evasion
+- proxy rotation intended to evade rate limits or security controls
+
+CAPTCHA and anti-bot pages must instead be detected and reported as:
+"MANUAL_ACTION_REQUIRED"
+
+The application must pause and allow an authorized human operator to continue manually.
+
+PROJECT ARCHITECTURE
+--------------------
+
+1. GitHub repository
+2. Render deployment
+3. Python backend running on Render
+4. Selenium-controlled Chromium/Chrome browser
+5. AI-powered webpage element identification
+6. Text-based client
+7. Browser preview/stream endpoint
+8. Secure task/result API
+
+GitHub is connected to Render.
+
+Every push to the configured GitHub branch should trigger a Render deployment.
+
+Create all required files for a clean repository, including:
+
+- backend/
+- client/
+- tests/
+- requirements.txt
+- Dockerfile
+- render.yaml
+- .env.example
+- README.md
+- .gitignore
+
+Use environment variables for all secrets.
+
+Never hard-code API keys, passwords, tokens, cookies, or credentials.
+
+BACKEND
+-------
+
+Use Python.
+
+Prefer FastAPI for the HTTP API.
+
+The backend must provide:
+
+POST /task
+
+Accept a task containing:
+
+- target_url
+- username
+- password
+- natural_language_instruction
+
+Credentials must be handled only in memory whenever possible.
+
+Never write plaintext passwords to logs.
+
+Never return passwords in API responses.
+
+The backend creates an isolated browser session for the task.
+
+Each task receives a unique task_id.
+
+Provide endpoints similar to:
+
+POST /task
+GET /task/{task_id}
+GET /task/{task_id}/events
+GET /task/{task_id}/preview
+POST /task/{task_id}/manual-action
+POST /task/{task_id}/stop
+
+Return clear task states:
+
+QUEUED
+STARTING
+RUNNING
+WAITING_FOR_MANUAL_ACTION
+SUCCESS
+FAILURE
+STOPPED
+TIMEOUT
+
+SELENIUM
+--------
+
+Run Chromium/Chrome through Selenium.
+
+Use the normal browser rendering mode required by the Render environment.
+
+Do not implement stealth techniques or mechanisms intended to defeat anti-bot systems.
+
+The browser must:
+
+1. Navigate to the supplied authorized URL.
+2. Wait for the page to load.
+3. Inspect the DOM.
+4. Collect useful element metadata.
+5. Ask the configured AI model to identify relevant elements.
+6. Fill the username field.
+7. Fill the password field.
+8. Identify the appropriate login/submit button.
+9. Click it.
+10. Wait for the result.
+11. Determine whether the login appears successful or unsuccessful.
+12. Return a structured result.
+
+The automation must use robust Selenium techniques:
+
+- explicit waits
+- WebDriverWait
+- expected_conditions
+- stale-element recovery
+- timeout handling
+- page-load timeout
+- screenshot capture
+- browser console/error handling where available
+
+Do not rely exclusively on fixed sleep() calls.
+
+AI ELEMENT IDENTIFICATION
+--------------------------
+
+Use an AI provider abstraction.
+
+The preferred provider should be configurable through environment variables.
+
+Support a Groq-compatible provider.
+
+The preferred model should be configurable, for example:
+
+GROQ_MODEL=...
+
+Do not hard-code the model so it can be changed later.
+
+The AI must NOT receive the user's plaintext password unnecessarily.
+
+For element identification, send only the relevant DOM metadata, such as:
+
+- tag name
+- id
+- name
+- type
+- placeholder
+- aria-label
+- visible text
+- role
+- nearby labels
+- CSS selector candidates
+- XPath candidates
+
+Do not send password values to the AI element-selection prompt.
+
+The AI should return strict JSON such as:
+
+{
+  "username_selector": "...",
+  "password_selector": "...",
+  "submit_selector": "...",
+  "confidence": 0.95,
+  "reason": "..."
+}
+
+Validate the JSON using Pydantic.
+
+Never execute arbitrary JavaScript returned by the model.
+
+Never allow the model to provide unrestricted shell commands.
+
+BROWSER AGENT
+-------------
+
+Implement a controlled browser-agent loop.
+
+The AI may select from a limited set of actions:
+
+- navigate
+- click
+- type
+- wait
+- inspect
+- screenshot
+- finish
+- request_manual_action
+
+Validate every action against an allowlist.
+
+The AI must not have unrestricted access to the operating system.
+
+The AI must not execute shell commands.
+
+The browser agent should maintain a compact state representation to avoid sending the entire webpage to the model repeatedly.
+
+AI prompts should instruct the model to:
+
+- use the minimum number of actions
+- prefer stable selectors
+- avoid destructive actions
+- never expose credentials
+- stop when authentication succeeds or clearly fails
+- request human intervention when anti-bot protection is encountered
+
+CAPTCHA / ANTI-BOT HANDLING
+---------------------------
+
+Do NOT automatically bypass CAPTCHA or Cloudflare.
+
+Detect likely CAPTCHA/anti-bot challenges.
+
+When detected:
+
+1. Stop automated interaction.
+2. Set task state to WAITING_FOR_MANUAL_ACTION.
+3. Notify the client.
+4. Keep the browser session alive for a configurable amount of time.
+5. Allow the authorized human operator to complete the challenge manually.
+6. Resume only after explicit confirmation.
+
+Examples of detected states:
+
+- CAPTCHA
+- reCAPTCHA
+- hCaptcha
+- Cloudflare challenge
+- "verify you are human"
+- unusual traffic
+- access denied
+- rate limit
+
+BROWSER PREVIEW
+---------------
+
+Implement a browser preview suitable for viewing from an Android device.
+
+The client should display the preview URL returned by the backend.
+
+The preview should provide a near-real-time view of the browser session.
+
+Prefer a standards-based browser-streaming solution that can operate in a Render container.
+
+If direct VLC-compatible streaming is technically unsuitable, document the limitation and implement the most practical HTTP/MJPEG or WebRTC-based preview.
+
+Do not claim that VLC compatibility is guaranteed unless the chosen protocol is actually supported.
+
+The preview must be protected by an authentication/session token.
+
+Do not expose browser sessions publicly without authorization.
+
+CLIENT
+------
+
+Create a separate Python command-line client.
+
+The client should:
+
+1. Start.
+2. Display the backend connection status.
+3. Request or display the browser preview URL.
+4. Ask the operator for the target URL.
+5. Ask for ONE username.
+6. Ask for ONE password securely without echoing it.
+7. Send exactly one authorized test task.
+8. Wait for the backend result.
+9. Display progress.
+10. Display SUCCESS, FAILURE, STOPPED, TIMEOUT, or MANUAL_ACTION_REQUIRED.
+11. Display the reason/result.
+12. Optionally save a screenshot after successful completion.
+
+The client must never print passwords.
+
+Do not implement automatic credential-list processing.
+
+If a local credential file is supported for convenience, it must require explicit operator selection of a SINGLE entry and must never automatically iterate through multiple credentials.
+
+RESULT STORAGE
+--------------
+
+After SUCCESS:
+
+Save a screenshot under:
+
+img/
+
+Use a safe filename derived from a task ID or sanitized username.
+
+Never use the raw username as an unrestricted filesystem path.
+
+For example:
+
+img/<timestamp>_<sanitized_username>.png
+
+Store only the minimum necessary information.
+
+Do not store passwords.
+
+Maintain an optional results file such as:
+
+results.jsonl
+
+with:
+
+- timestamp
+- target URL
+- username identifier
+- task ID
+- result
+- reason
+- screenshot path
+
+Never store the password.
+
+SECURITY
+--------
+
+Implement:
+
+- API authentication
+- per-task authorization
+- HTTPS assumptions
+- secure cookies where applicable
+- request validation
+- maximum task duration
+- browser session timeout
+- rate limiting
+- URL allowlisting
+- SSRF protection
+- localhost/private-network blocking
+- DNS rebinding protection where practical
+- maximum request size
+- structured logging
+- password redaction
+- secret redaction
+- cleanup of browser sessions
+
+The target URL should be restricted to an explicit allowlist in production.
+
+Provide:
+
+ALLOWED_DOMAINS=
+
+in .env.example.
+
+Reject:
+
+- localhost
+- 127.0.0.1
+- 0.0.0.0
+- private RFC1918 addresses
+- link-local addresses
+- cloud metadata endpoints
+- internal Render services
+
+unless explicitly configured for a local development environment.
+
+RENDER
+------
+
+Create a Render-compatible deployment.
+
+Provide:
+
+render.yaml
+
+and:
+
+Dockerfile
+
+The container must install:
+
+- Python
+- Chromium/Chrome
+- Selenium-compatible browser driver
+- required system dependencies
+
+Detect the browser executable dynamically where practical.
+
+Do not assume a local desktop environment.
+
+Document Render-specific browser requirements.
+
+Use Render environment variables for:
+
+GROQ_API_KEY
+GROQ_MODEL
+API_AUTH_TOKEN
+ALLOWED_DOMAINS
+BROWSER_SESSION_TIMEOUT
+TASK_TIMEOUT
+
+Do not commit .env.
+
+GITHUB → RENDER
+---------------
+
+Document how to:
+
+1. Create the GitHub repository.
+2. Push the project.
+3. Create a Render Web Service.
+4. Connect Render to GitHub.
+5. Configure automatic deploys.
+6. Configure environment variables.
+7. Deploy.
+8. Verify the health endpoint.
+
+Create:
+
+GET /health
+
+returning:
+
+{
+  "status": "ok"
+}
+
+TESTING
+-------
+
+Create unit tests and integration-oriented tests for:
+
+- API validation
+- task lifecycle
+- authentication
+- URL allowlist
+- SSRF protection
+- password redaction
+- AI response validation
+- selector validation
+- browser session cleanup
+- screenshot filename sanitization
+- timeout handling
+- CAPTCHA detection
+- manual-action state
+- successful authorized login flow using a local mock/test website
+
+Do NOT use real third-party accounts in tests.
+
+Create a local mock login page for automated tests.
+
+DOCUMENTATION
+-------------
+
+README.md must explain:
+
+- architecture
+- local setup
+- Docker setup
+- Render deployment
+- GitHub integration
+- environment variables
+- Groq configuration
+- Selenium configuration
+- browser preview
+- client usage
+- security model
+- CAPTCHA/manual intervention behavior
+- troubleshooting
+- limitations
+
+Also provide example commands for:
+
+python -m venv .venv
+pip install -r requirements.txt
+uvicorn backend.main:app --reload
+
+and client startup.
+
+CODE QUALITY
+------------
+
+Use:
+
+- Python 3.11+
+- type hints
+- Pydantic
+- FastAPI
+- async API where appropriate
+- clean separation of modules
+- dependency injection where useful
+- structured logging
+- meaningful exception classes
+- configuration management
+- no unnecessary dependencies
+
+Do not create one huge Python file.
+
+Separate concerns into modules such as:
+
+backend/
+  main.py
+  config.py
+  api/
+  browser/
+  ai/
+  tasks/
+  security/
+  streaming/
+  models/
+  utils/
+
+client/
+  main.py
+  api_client.py
+  ui.py
+  config.py
+
+FINAL IMPLEMENTATION REQUIREMENTS
+----------------------------------
+
+Before writing code:
+
+1. Inspect the repository.
+2. Determine whether files already exist.
+3. Reuse good existing code where appropriate.
+4. Do not overwrite unrelated files.
+5. Produce a short implementation plan.
+6. Identify dependencies.
+
+Then implement the project.
+
+After implementation:
+
+1. Run formatting/linting if configured.
+2. Run tests.
+3. Start the application locally if possible.
+4. Test the health endpoint.
+5. Test the mock login flow.
+6. Verify that passwords never appear in logs.
+7. Verify that screenshots are created safely.
+8. Verify that unauthorized domains are rejected.
+9. Verify that CAPTCHA detection pauses automation.
+10. Verify browser sessions are cleaned up after completion.
+
+Do not commit or push to GitHub automatically.
+
+At the end provide:
+
+- files created
+- files modified
+- installation commands
+- environment variables required
+- local test instructions
+- Render deployment instructions
+- known limitations
+- recommended next steps
+
+IMPORTANT:
+The system is an authorized browser-testing and QA tool. It must not implement credential stuffing, bulk login attempts, CAPTCHA bypassing, Cloudflare bypassing, anti-bot evasion, or other mechanisms intended to defeat website security controls.
