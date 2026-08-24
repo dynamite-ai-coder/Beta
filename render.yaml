@@ -13,10 +13,18 @@ services:
       - key: API_AUTH_TOKEN
         generateValue: true
       - key: ALLOWED_DOMAINS
-        value: example.com
+        value: ""
       - key: BROWSER_SESSION_TIMEOUT
         value: 600
       - key: TASK_TIMEOUT
         value: 300
-      - key: PYTHON_VERSION
-        value: 3.11.0
+      - key: HEADLESS
+        value: "true"
+      - key: PREVIEW_ENABLED
+        value: "true"
+      - key: PREVIEW_TOKEN_SECRET
+        generateValue: true
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "30"
+      - key: DEBUG
+        value: "false"
