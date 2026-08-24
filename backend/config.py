@@ -53,6 +53,11 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context: object) -> None:
         import os
+        self.api_auth_token = self.api_auth_token.strip()
+        self.ai_api_key = self.ai_api_key.strip()
+        self.ai_model = self.ai_model.strip()
+        self.ai_base_url = self.ai_base_url.strip()
+        self.database_url = self.database_url.strip()
         if not self.ai_api_key:
             self.ai_api_key = os.environ.get(
                 "GROQ_API_KEY", ""
