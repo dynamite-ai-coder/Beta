@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     browser_executable: str | None = None
     headless: bool = True
 
+    # Proxy (Moke API Residential)
+    proxy_enabled: bool = True
+    proxy_secret: str = ""
+    proxy_apikey: str = ""
+    proxy_url: str = ""
+
     # Preview
     preview_enabled: bool = True
     preview_token_secret: str = "change-me-in-production"
@@ -58,6 +64,23 @@ class Settings(BaseSettings):
         self.ai_model = self.ai_model.strip()
         self.ai_base_url = self.ai_base_url.strip()
         self.database_url = self.database_url.strip()
+        self.proxy_secret = self.proxy_secret.strip()
+        self.proxy_apikey = self.proxy_apikey.strip()
+        self.proxy_url = self.proxy_url.strip()
+        if not self.proxy_secret:
+            self.proxy_secret = os.environ.get(
+                "MOKE_SECRET", ""
+            )
+        if not self.proxy_apikey:
+            self.proxy_apikey = os.environ.get(
+                "MOKE_APIKEY", ""
+            )
+        if self.proxy_secret and self.proxy_apikey and not self.proxy_url:
+            self.proxy_url = (
+                f"http://user-{self.proxy_apikey}"
+                f":{self.proxy_secret}"
+                f"@all.proxymesh.com:31280"
+            )
         if not self.ai_api_key:
             self.ai_api_key = os.environ.get(
                 "GROQ_API_KEY", ""

@@ -3,13 +3,11 @@ from __future__ import annotations
 import logging
 import os
 
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
 )
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support.ui import WebDriverWait
@@ -24,12 +22,6 @@ CHROMIUM_PATHS = [
     "/usr/bin/google-chrome",
     "/usr/bin/google-chrome-stable",
     "/snap/bin/chromium",
-]
-
-CHROMEDRIVER_PATHS = [
-    "/usr/bin/chromedriver",
-    "/usr/local/bin/chromedriver",
-    "/usr/lib/chromium-browser/chromedriver",
 ]
 
 
@@ -52,21 +44,12 @@ def find_browser_executable() -> str:
     raise RuntimeError("No Chromium/Chrome browser found.")
 
 
-def find_chromedriver() -> str | None:
-    for path in CHROMEDRIVER_PATHS:
-        if os.path.exists(path):
-            return path
-
-    from shutil import which
-    found = which("chromedriver")
-    return found
-
-
 def create_browser() -> WebDriver:
-    options = Options()
-    headless = "--headless=new" if settings.headless else ""
-    if headless:
-        options.add_argument(headless)
+    options = uc.ChromeOptions()
+
+    if settings.headless:
+        options.add_argument("--headless=new")
+
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
@@ -79,18 +62,56 @@ def create_browser() -> WebDriver:
     )
     options.add_argument("--remote-debugging-port=0")
     options.add_argument("--user-data-dir=/tmp/chrome-profile")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument(
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    )
 
     browser_path = find_browser_executable()
     options.binary_location = browser_path
 
-    driver_path = find_chromedriver()
-    service = (
-        Service(executable_path=driver_path)
-        if driver_path
-        else Service()
-    )
+    if settings.proxy_enabled and settings.proxy_url:
+        options.add_argument(f"--proxy-server={settings.proxy_url}")
+        logger.info("Proxy enabled: %s", settings.proxy_url[:60])
 
-    driver = webdriver.Chrome(service=service, options=options)
+    try:
+        driver = uc.Chrome(
+            options=options,
+            headless=settings.headless,
+            version_main=None,
+            use_subprocess=True,
+        )
+    except Exception:
+        logger.warning(
+            "undetected-chromedriver failed, "
+            "falling back to standard Chrome"
+        )
+        from selenium import webdriver
+        from selenium.webdriver.chrome.service import Service
+
+        driver_path = None
+        for p in [
+            "/usr/bin/chromedriver",
+            "/usr/local/bin/chromedriver",
+        ]:
+            if os.path.exists(p):
+                driver_path = p
+                break
+        from shutil import which as _which
+        if not driver_path:
+            driver_path = _which("chromedriver")
+
+        service = (
+            Service(executable_path=driver_path)
+            if driver_path
+            else Service()
+        )
+        driver = webdriver.Chrome(
+            service=service, options=options
+        )
+
     driver.set_page_load_timeout(30)
     driver.implicitly_wait(5)
 

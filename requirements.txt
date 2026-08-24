@@ -26,3 +26,7 @@ croniter==3.0.0
 # Monitoring
 prometheus-client==0.21.0
 structlog==24.4.0
+
+# Anti-detection
+undetected-chromedriver==3.5.5
+cloudscraper==1.2.71
