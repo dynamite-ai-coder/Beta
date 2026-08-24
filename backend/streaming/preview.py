@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from selenium.common.exceptions import WebDriverException
+
 from backend.browser.driver import take_screenshot
 
 logger = logging.getLogger(__name__)
@@ -39,7 +41,7 @@ class PreviewStreamer:
                 yield boundary + content_type + frame + b"\r\n"
             except asyncio.TimeoutError:
                 continue
-            except Exception:
+            except StopAsyncIteration:
                 break
 
     async def capture_frames(self, task_id: str, driver_factory=None):
@@ -63,14 +65,14 @@ class PreviewStreamer:
                             pass
                         stream_info["frames"].put_nowait(frame)
                 await asyncio.sleep(0.5)
-        except Exception as e:
+        except (WebDriverException, OSError, RuntimeError) as e:
             logger.error("Frame capture error: %s", e)
         finally:
             if driver:
                 try:
                     driver.quit()
-                except Exception:
-                    pass
+                except (WebDriverException, OSError) as e:
+                    logger.debug("Preview driver close error (ignored): %s", e)
 
     def get_preview_url(self, task_id: str, base_url: str = "") -> str:
         stream_info = self._streams.get(task_id)

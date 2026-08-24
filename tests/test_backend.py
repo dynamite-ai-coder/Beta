@@ -5,6 +5,7 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -74,7 +75,7 @@ class TestTaskRequestValidation:
         assert req.target_url == "https://example.com/login"
 
     def test_invalid_url_no_protocol(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             TaskRequest(
                 target_url="example.com/login",
                 username="testuser",
@@ -82,7 +83,7 @@ class TestTaskRequestValidation:
             )
 
     def test_empty_username_rejected(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             TaskRequest(
                 target_url="https://example.com",
                 username="",
@@ -102,7 +103,7 @@ class TestAISelectors:
         assert sel.confidence == 0.95
 
     def test_confidence_bounds(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             AISelectors(
                 username_selector="#u",
                 password_selector="#p",

@@ -6,6 +6,8 @@ import logging
 import os
 from datetime import datetime, timezone
 
+from selenium.common.exceptions import TimeoutException, WebDriverException
+
 from backend.ai.identifier import ElementIdentifier
 from backend.ai.provider import AIProvider
 from backend.browser.agent import BrowserAgent
@@ -113,7 +115,7 @@ class TaskManager:
 
             self._add_event(task_id, "task_completed", final_state.value)
 
-        except Exception as e:
+        except (OSError, WebDriverException, TimeoutException, ValueError) as e:
             logger.error("Task execution error: %s", e)
             await self.update_task_state(task_id, TaskState.FAILURE, str(e))
         finally:

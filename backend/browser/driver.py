@@ -4,6 +4,7 @@ import logging
 import os
 
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -95,7 +96,7 @@ def navigate_safe(driver: WebDriver, url: str, timeout: int = 30) -> bool:
             lambda d: d.execute_script("return document.readyState") == "complete"
         )
         return True
-    except Exception as e:
+    except (WebDriverException, TimeoutException) as e:
         logger.error("Navigation failed: %s", e)
         return False
 
@@ -178,7 +179,7 @@ def collect_dom_elements(driver: WebDriver, max_elements: int = 80) -> list[dict
     try:
         result = driver.execute_script(script)
         return result if result else []
-    except Exception as e:
+    except (WebDriverException, TypeError, KeyError) as e:
         logger.error("DOM collection failed: %s", e)
         return []
 
@@ -202,6 +203,6 @@ def detect_captcha(driver: WebDriver) -> bool:
             title = iframe.get_attribute("title") or ""
             if any(ind in (src + title).lower() for ind in ["captcha", "recaptcha", "hcaptcha", "challenge"]):
                 return True
-    except Exception:
-        pass
+    except (WebDriverException, AttributeError) as e:
+        logger.debug("CAPTCHA detection error (ignored): %s", e)
     return False

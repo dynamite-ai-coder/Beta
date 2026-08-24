@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
+
+import httpx
 
 from client.api_client import APIClient
 from client.config import ClientConfig
@@ -16,6 +19,8 @@ from client.ui import (
     print_task_state,
 )
 
+logger = logging.getLogger(__name__)
+
 
 async def run_client() -> None:
     print_header()
@@ -28,7 +33,7 @@ async def run_client() -> None:
     try:
         health = await client.health()
         print_status(f"Backend connected. Status: {health.get('status', 'unknown')}")
-    except Exception as e:
+    except (httpx.ConnectError, httpx.TimeoutException, OSError) as e:
         print_error(f"Cannot connect to backend: {e}")
         print_error("Make sure the backend is running: uvicorn backend.main:app --reload")
         return
@@ -81,7 +86,8 @@ async def run_client() -> None:
 
             try:
                 task_info = await client.get_task(task_id)
-            except Exception:
+            except (httpx.HTTPError, OSError) as e:
+                logger.debug("Poll error (retrying): %s", e)
                 continue
 
             state = task_info.get("state", "UNKNOWN")
@@ -96,7 +102,7 @@ async def run_client() -> None:
                     try:
                         await client.manual_action(task_id)
                         print_status("Resumed.")
-                    except Exception as e:
+                    except (httpx.HTTPError, OSError) as e:
                         print_error(f"Failed to resume: {e}")
 
             if state in ("SUCCESS", "FAILURE", "STOPPED", "TIMEOUT"):
@@ -111,17 +117,16 @@ async def run_client() -> None:
         events = await client.get_events(task_id)
         print_events(events)
 
-        if state == "SUCCESS":
-            if confirm_action("Save screenshot?"):
+        if state == "SUCCESS" and confirm_action("Save screenshot?"):
                 print_result("Screenshot saved in img/ directory on server")
 
     except KeyboardInterrupt:
         print_status("\nInterrupted. Stopping task...")
         try:
             await client.stop_task(task_id)
-        except Exception:
-            pass
-    except Exception as e:
+        except (httpx.HTTPError, OSError) as e:
+            logger.debug("Stop task error (ignored): %s", e)
+    except (httpx.HTTPError, OSError, ValueError) as e:
         print_error(f"Error: {e}")
 
 

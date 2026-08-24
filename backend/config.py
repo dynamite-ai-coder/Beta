@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
 def is_url_allowed(url: str) -> bool:
     try:
         parsed = urlparse(url)
-    except Exception:
+    except ValueError:
         return False
 
     if parsed.scheme not in ("http", "https"):

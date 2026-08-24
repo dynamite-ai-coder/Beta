@@ -44,7 +44,7 @@ class AIProvider:
                 data = response.json()
                 content = data["choices"][0]["message"]["content"]
                 return self._parse_json_response(content)
-        except Exception as e:
+        except (httpx.HTTPStatusError, httpx.RequestError, KeyError, ValueError) as e:
             logger.error("AI provider error: %s", e)
             return None
 
@@ -56,7 +56,7 @@ class AIProvider:
                 content = "\n".join(lines[1:-1])
             data = json.loads(content)
             return AISelectors(**data)
-        except (json.JSONDecodeError, KeyError, Exception) as e:
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
             logger.error("Failed to parse AI response: %s", e)
             return None
 
@@ -85,6 +85,6 @@ class AIProvider:
                 response.raise_for_status()
                 data = response.json()
                 return data["choices"][0]["message"]["content"]
-        except Exception as e:
+        except (httpx.HTTPStatusError, httpx.RequestError, KeyError, ValueError) as e:
             logger.error("AI chat error: %s", e)
             return None

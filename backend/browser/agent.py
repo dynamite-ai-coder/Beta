@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 from backend.ai.identifier import ElementIdentifier
 from backend.browser.driver import (
@@ -62,8 +65,8 @@ class BrowserAgent:
         if self._driver:
             try:
                 self._driver.quit()
-            except Exception:
-                pass
+            except (OSError, WebDriverException) as e:
+                logger.debug("Browser close error (ignored): %s", e)
             self._driver = None
 
     async def execute_login(
@@ -110,8 +113,7 @@ class BrowserAgent:
                 return result
 
             self._driver.implicitly_wait(3)
-            import time
-            time.sleep(2)
+            await asyncio.sleep(2)
 
             if detect_captcha(self._driver):
                 self._state = TaskState.WAITING_FOR_MANUAL_ACTION
@@ -129,7 +131,7 @@ class BrowserAgent:
                 result["state"] = TaskState.FAILURE
                 result["reason"] = "Login failed - could not confirm success"
 
-        except Exception as e:
+        except (OSError, WebDriverException, TimeoutException) as e:
             logger.error("Login execution failed: %s", e)
             self._state = TaskState.FAILURE
             result["reason"] = f"Error: {e!s}"
@@ -169,7 +171,7 @@ class BrowserAgent:
             submit_btn.click()
 
             return True
-        except Exception as e:
+        except (OSError, WebDriverException, TimeoutException) as e:
             logger.error("Fill and submit failed: %s", e)
             return False
 
