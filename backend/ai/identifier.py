@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import logging
 
-from backend.ai.provider import AIProvider
+from backend.ai.providers import BaseAIProvider
 from backend.models.schemas import AISelectors, DOMElement
 
 logger = logging.getLogger(__name__)
 
-ELEMENT_IDENTIFICATION_PROMPT = """You are an expert at identifying web page elements for automated testing.
+ELEMENT_IDENTIFICATION_PROMPT = """\
+You are an expert at identifying web page elements for automated testing.
 
 Given the following DOM elements from a login page, identify the best CSS selectors for:
 1. The username/email input field
@@ -27,25 +28,38 @@ DOM Elements:
 {elements}
 
 Instructions:
-- Prefer stable selectors (id, name attributes) over positional ones
-- If an element has an id attribute, use #id selector
-- If an element has a name attribute, use [name="..."] selector
-- Consider placeholder text, aria-labels, and nearby labels
-- The confidence should reflect how certain you are about the selections
+- Prefer stable selectors (id, name) over positional ones
+- If an element has an id, use #id selector
+- If it has a name, use [name="..."] selector
+- Consider placeholder text, aria-labels, and labels
+- Confidence should reflect certainty about selections
 - Only return the JSON, no other text
 """
 
 
+def _format_element(e: DOMElement) -> str:
+    return (
+        f"- <{e.tag}> id={e.id} name={e.name} "
+        f"type={e.type} placeholder={e.placeholder} "
+        f"aria-label={e.aria_label} text={e.text} "
+        f"role={e.role} css={e.css_selector} "
+        f"xpath={e.xpath}"
+    )
+
+
 class ElementIdentifier:
-    def __init__(self, ai_provider: AIProvider) -> None:
+    def __init__(self, ai_provider: BaseAIProvider) -> None:
         self._ai = ai_provider
 
-    async def identify_elements(self, elements: list[DOMElement]) -> AISelectors | None:
+    async def identify_elements(
+        self, elements: list[DOMElement]
+    ) -> AISelectors | None:
         elements_text = "\n".join(
-            f"- <{e.tag}> id={e.id} name={e.name} type={e.type} "
-            f"placeholder={e.placeholder} aria-label={e.aria_label} "
-            f"text={e.text} role={e.role} css={e.css_selector} xpath={e.xpath}"
-            for e in elements
+            _format_element(e) for e in elements
         )
-        prompt = ELEMENT_IDENTIFICATION_PROMPT.format(elements=elements_text)
+        prompt = (
+            ELEMENT_IDENTIFICATION_PROMPT.format(
+                elements=elements_text
+            )
+        )
         return await self._ai.parse_selectors(prompt)

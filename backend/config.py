@@ -13,9 +13,16 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
-    # AI / Groq
-    groq_api_key: str = ""
-    groq_model: str = "llama-3.1-8b-instant"
+    # AI
+    ai_api_key: str = ""
+    ai_model: str = "llama-3.1-8b-instant"
+    ai_base_url: str = "https://api.groq.com/openai/v1"
+    ai_provider: str = "groq"
+
+    # Database
+    database_url: str = (
+        "sqlite+aiosqlite:///./browser_automation.db"
+    )
 
     # Security
     allowed_domains: str = ""
@@ -38,13 +45,37 @@ class Settings(BaseSettings):
     img_dir: str = "img"
     results_file: str = "results.jsonl"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "allow"}
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "allow",
+    }
+
+    def model_post_init(self, __context: object) -> None:
+        import os
+        if not self.ai_api_key:
+            self.ai_api_key = os.environ.get(
+                "GROQ_API_KEY", ""
+            )
+        if self.ai_model == "llama-3.1-8b-instant":
+            groq_model = os.environ.get("GROQ_MODEL")
+            if groq_model:
+                self.ai_model = groq_model
+        default_url = "https://api.groq.com/openai/v1"
+        if self.ai_base_url == default_url:
+            groq_key = os.environ.get("GROQ_API_KEY")
+            if groq_key and not self.ai_api_key:
+                self.ai_base_url = default_url
 
     @property
     def allowed_domains_list(self) -> list[str]:
         if not self.allowed_domains:
             return []
-        return [d.strip().lower() for d in self.allowed_domains.split(",") if d.strip()]
+        return [
+            d.strip().lower()
+            for d in self.allowed_domains.split(",")
+            if d.strip()
+        ]
 
 
 BLOCKED_NETWORKS = [
@@ -58,7 +89,13 @@ BLOCKED_NETWORKS = [
     ipaddress.ip_network("fe80::/10"),
 ]
 
-BLOCKED_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "169.254.169.254", "metadata.google.internal"}
+BLOCKED_HOSTS = {
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "169.254.169.254",
+    "metadata.google.internal",
+}
 
 settings = Settings()
 
@@ -91,8 +128,11 @@ def is_url_allowed(url: str) -> bool:
 
     allowed = settings.allowed_domains_list
     if allowed:
+        host_lower = hostname.lower()
         for domain in allowed:
-            if hostname.lower() == domain.lower() or hostname.lower().endswith("." + domain.lower()):
+            if host_lower == domain.lower():
+                return True
+            if host_lower.endswith("." + domain.lower()):
                 return True
         return False
 

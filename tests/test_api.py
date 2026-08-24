@@ -182,3 +182,93 @@ class TestTaskLifecycle:
         await manager.update_task_state("test-state", TaskState.RUNNING)
         task = manager.get_task("test-state")
         assert task["state"] == TaskState.RUNNING
+
+
+class TestListTasks:
+    @pytest.mark.anyio
+    async def test_list_tasks_empty(self, auth_headers):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/v1/tasks", headers=auth_headers)
+            assert response.status_code == 200
+            assert isinstance(response.json(), list)
+
+    @pytest.mark.anyio
+    async def test_list_tasks_with_limit(self, auth_headers):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/v1/tasks?limit=5&offset=0", headers=auth_headers)
+            assert response.status_code == 200
+
+
+class TestScheduledTasks:
+    @pytest.mark.anyio
+    async def test_list_scheduled_tasks_empty(self, auth_headers):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/v1/scheduled-tasks", headers=auth_headers)
+            assert response.status_code == 200
+            assert isinstance(response.json(), list)
+
+    @pytest.mark.anyio
+    async def test_create_scheduled_task_invalid_cron(self, auth_headers):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/scheduled-task",
+                json={
+                    "name": "test-schedule",
+                    "target_url": "https://example.com",
+                    "username": "user",
+                    "password": "pass",
+                    "cron_expression": "invalid-cron",
+                },
+                headers=auth_headers,
+            )
+            assert response.status_code == 400
+
+    @pytest.mark.anyio
+    async def test_delete_nonexistent_scheduled_task(self, auth_headers):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.delete(
+                "/api/v1/scheduled-task/nonexistent-id",
+                headers=auth_headers,
+            )
+            assert response.status_code == 404
+
+
+class TestMetrics:
+    @pytest.mark.anyio
+    async def test_metrics_endpoint(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/metrics")
+            assert response.status_code == 200
+            assert "text/plain" in response.headers["content-type"]
+
+    @pytest.mark.anyio
+    async def test_metrics_contain_prometheus_data(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/metrics")
+            content = response.text
+            assert "http_requests_total" in content or "http_request_duration_seconds" in content
+
+
+class TestDashboard:
+    @pytest.mark.anyio
+    async def test_dashboard_root(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/")
+            assert response.status_code == 200
+            assert "text/html" in response.headers["content-type"]
+
+    @pytest.mark.anyio
+    async def test_health_returns_version(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/health")
+            data = response.json()
+            assert data["version"] == "1.1.0"

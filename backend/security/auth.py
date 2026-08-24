@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from backend.config import settings
 
@@ -23,7 +24,11 @@ def create_session_token() -> str:
 def validate_session_token(token: str) -> bool:
     if token in _tokens:
         created = _tokens[token]
-        if datetime.now(timezone.utc) - created < timedelta(seconds=settings.browser_session_timeout):
+        now = datetime.now(timezone.utc)
+        timeout = timedelta(
+            seconds=settings.browser_session_timeout
+        )
+        if now - created < timeout:
             return True
         del _tokens[token]
     return False
@@ -31,7 +36,13 @@ def validate_session_token(token: str) -> bool:
 
 def cleanup_expired_tokens() -> int:
     now = datetime.now(timezone.utc)
-    expired = [t for t, c in _tokens.items() if now - c > timedelta(seconds=settings.browser_session_timeout)]
+    timeout = timedelta(
+        seconds=settings.browser_session_timeout
+    )
+    expired = [
+        t for t, c in _tokens.items()
+        if now - c > timeout
+    ]
     for t in expired:
         del _tokens[t]
     return len(expired)
@@ -50,16 +61,27 @@ def sanitize_filename(name: str) -> str:
     return name[:100] if name else "unknown"
 
 
-async def verify_api_key(authorization: str | None = Header(None)) -> None:
+async def verify_api_key(
+    authorization: str | None = Header(None),
+) -> None:
     if not settings.api_auth_token:
         return
     if not authorization:
-        raise HTTPException(status_code=401, detail="Authorization header required")
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header required",
+        )
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer":
-        raise HTTPException(status_code=401, detail="Bearer token required")
-    if not secrets.compare_digest(token, settings.api_auth_token):
-        raise HTTPException(status_code=403, detail="Invalid API token")
+        raise HTTPException(
+            status_code=401, detail="Bearer token required"
+        )
+    if not secrets.compare_digest(
+        token, settings.api_auth_token
+    ):
+        raise HTTPException(
+            status_code=403, detail="Invalid API token"
+        )
 
 
 _rate_limits: dict[str, list[datetime]] = {}
@@ -70,15 +92,26 @@ def check_rate_limit(client_ip: str) -> bool:
     window = timedelta(seconds=60)
     if client_ip not in _rate_limits:
         _rate_limits[client_ip] = []
-    _rate_limits[client_ip] = [t for t in _rate_limits[client_ip] if now - t < window]
-    if len(_rate_limits[client_ip]) >= settings.rate_limit_per_minute:
+    _rate_limits[client_ip] = [
+        t for t in _rate_limits[client_ip]
+        if now - t < window
+    ]
+    limit = settings.rate_limit_per_minute
+    if len(_rate_limits[client_ip]) >= limit:
         return False
     _rate_limits[client_ip].append(now)
     return True
 
 
-async def rate_limit_middleware(request: Request, call_next):
-    client_ip = request.client.host if request.client else "unknown"
+async def rate_limit_middleware(
+    request: Request, call_next
+):
+    client_ip = (
+        request.client.host if request.client else "unknown"
+    )
     if not check_rate_limit(client_ip):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limit exceeded"},
+        )
     return await call_next(request)

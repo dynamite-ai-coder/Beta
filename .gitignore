@@ -18,3 +18,4 @@ build/
 *.egg-info/
 .DS_Store
 Thumbs.db
+browser_automation.db

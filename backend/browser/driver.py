@@ -4,7 +4,10 @@ import logging
 import os
 
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import (
+    TimeoutException,
+    WebDriverException,
+)
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -31,20 +34,22 @@ CHROMEDRIVER_PATHS = [
 
 
 def find_browser_executable() -> str:
-    if settings.browser_executable and os.path.exists(settings.browser_executable):
-        return settings.browser_executable
+    if settings.browser_executable:
+        if os.path.exists(settings.browser_executable):
+            return settings.browser_executable
 
     for path in CHROMIUM_PATHS:
         if os.path.exists(path):
             return path
 
     from shutil import which
-    for name in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable"):
+    names = ("chromium", "chromium-browser", "google-chrome")
+    for name in names:
         found = which(name)
         if found:
             return found
 
-    raise RuntimeError("No Chromium/Chrome browser found. Install chromium-browser.")
+    raise RuntimeError("No Chromium/Chrome browser found.")
 
 
 def find_chromedriver() -> str | None:
@@ -54,15 +59,14 @@ def find_chromedriver() -> str | None:
 
     from shutil import which
     found = which("chromedriver")
-    if found:
-        return found
-
-    return None
+    return found
 
 
 def create_browser() -> WebDriver:
     options = Options()
-    options.add_argument("--headless=new" if settings.headless else "")
+    headless = "--headless=new" if settings.headless else ""
+    if headless:
+        options.add_argument(headless)
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
@@ -70,7 +74,9 @@ def create_browser() -> WebDriver:
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-infobars")
     options.add_argument("--disable-browser-side-navigation")
-    options.add_argument("--disable-features=VizDisplayCompositor")
+    options.add_argument(
+        "--disable-features=VizDisplayCompositor"
+    )
     options.add_argument("--remote-debugging-port=0")
     options.add_argument("--user-data-dir=/tmp/chrome-profile")
 
@@ -78,7 +84,11 @@ def create_browser() -> WebDriver:
     options.binary_location = browser_path
 
     driver_path = find_chromedriver()
-    service = Service(executable_path=driver_path) if driver_path else Service()
+    service = (
+        Service(executable_path=driver_path)
+        if driver_path
+        else Service()
+    )
 
     driver = webdriver.Chrome(service=service, options=options)
     driver.set_page_load_timeout(30)
@@ -88,12 +98,17 @@ def create_browser() -> WebDriver:
     return driver
 
 
-def navigate_safe(driver: WebDriver, url: str, timeout: int = 30) -> bool:
+def navigate_safe(
+    driver: WebDriver, url: str, timeout: int = 30
+) -> bool:
     try:
         driver.set_page_load_timeout(timeout)
         driver.get(url)
         WebDriverWait(driver, timeout).until(
-            lambda d: d.execute_script("return document.readyState") == "complete"
+            lambda d: d.execute_script(
+                "return document.readyState"
+            )
+            == "complete"
         )
         return True
     except (WebDriverException, TimeoutException) as e:
@@ -105,77 +120,102 @@ def take_screenshot(driver: WebDriver) -> bytes:
     return driver.get_screenshot_as_png()
 
 
-def collect_dom_elements(driver: WebDriver, max_elements: int = 80) -> list[dict]:
-    script = """
-    const elements = [];
-    const selectors = [
-        'input[type="text"]', 'input[type="email"]', 'input[type="tel"]',
-        'input[type="password"]', 'input:not([type])',
-        'button[type="submit"]', 'button', 'input[type="submit"]',
-        'a[href*="login"]', 'a[href*="sign"]',
-        '[role="button"]', '[role="textbox"]',
-        '[aria-label]', '[placeholder]'
-    ];
-    const seen = new Set();
-    for (const sel of selectors) {
-        for (const el of document.querySelectorAll(sel)) {
-            if (seen.has(el) || elements.length >= MAX) continue;
-            seen.add(el);
-            const rect = el.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0) continue;
-            let cssSel = '';
-            try {
-                if (el.id) cssSel = '#' + CSS.escape(el.id);
-                else if (el.name) cssSel = el.tagName.toLowerCase() + '[name="' + el.name + '"]';
-                else {
-                    let path = [];
-                    let current = el;
-                    while (current && current !== document.body) {
-                        let selector = current.tagName.toLowerCase();
-                        if (current.id) { selector = '#' + CSS.escape(current.id); path.unshift(selector); break; }
-                        if (current.className && typeof current.className === 'string') {
-                            const cls = current.className.trim().split(/\\s+/).filter(c => c && !c.includes('--')).slice(0,2).map(c => '.' + c).join('');
-                            selector += cls;
-                        }
-                        path.unshift(selector);
-                        current = current.parentElement;
-                    }
-                    cssSel = path.join(' > ');
-                }
-            } catch(e) {}
-            let xpath = '';
-            try {
-                const xp = document.evaluate('absoluteXPath' , el, null, 0, null);
-            } catch(e) {}
-            const labels = [];
+JS_COLLECT_DOM = """
+const elements = [];
+const selectors = [
+    'input[type="text"]', 'input[type="email"]',
+    'input[type="tel"]', 'input[type="password"]',
+    'input:not([type])', 'button[type="submit"]',
+    'button', 'input[type="submit"]',
+    'a[href*="login"]', 'a[href*="sign"]',
+    '[role="button"]', '[role="textbox"]',
+    '[aria-label]', '[placeholder]'
+];
+const seen = new Set();
+for (const sel of selectors) {
+    for (const el of document.querySelectorAll(sel)) {
+        if (seen.has(el) || elements.length >= MAX) continue;
+        seen.add(el);
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        let cssSel = '';
+        try {
             if (el.id) {
-                const lbl = document.querySelector('label[for="' + el.id + '"]');
-                if (lbl) labels.push(lbl.textContent.trim());
+                cssSel = '#' + CSS.escape(el.id);
+            } else if (el.name) {
+                cssSel = el.tagName.toLowerCase()
+                    + '[name="' + el.name + '"]';
+            } else {
+                let path = [];
+                let current = el;
+                while (current && current !== document.body) {
+                    let s = current.tagName.toLowerCase();
+                    if (current.id) {
+                        s = '#' + CSS.escape(current.id);
+                        path.unshift(s);
+                        break;
+                    }
+                    if (current.className
+                        && typeof current.className === 'string'
+                    ) {
+                        const cls = current.className
+                            .trim().split(/\\s+/)
+                            .filter(c => c && !c.includes('--'))
+                            .slice(0, 2)
+                            .map(c => '.' + c).join('');
+                        s += cls;
+                    }
+                    path.unshift(s);
+                    current = current.parentElement;
+                }
+                cssSel = path.join(' > ');
             }
-            let parent = el.parentElement;
-            for (let i = 0; i < 3 && parent; i++) {
-                const lbl = parent.querySelector('label');
-                if (lbl && lbl.textContent.trim()) labels.push(lbl.textContent.trim());
-                parent = parent.parentElement;
-            }
-            elements.push({
-                tag: el.tagName.toLowerCase(),
-                id: el.id || null,
-                name: el.getAttribute('name') || null,
-                type: el.getAttribute('type') || null,
-                placeholder: el.getAttribute('placeholder') || null,
-                aria_label: el.getAttribute('aria-label') || null,
-                text: (el.textContent || '').trim().substring(0, 100) || null,
-                role: el.getAttribute('role') || null,
-                css_selector: cssSel || null,
-                xpath: null,
-                nearby_labels: labels.length ? labels : null,
-            });
+        } catch(e) {}
+        let xpath = '';
+        try {
+            const xp = document.evaluate(
+                'absoluteXPath', el, null, 0, null
+            );
+        } catch(e) {}
+        const labels = [];
+        if (el.id) {
+            const lbl = document.querySelector(
+                'label[for="' + el.id + '"]'
+            );
+            if (lbl) labels.push(lbl.textContent.trim());
         }
+        let parent = el.parentElement;
+        for (let i = 0; i < 3 && parent; i++) {
+            const lbl = parent.querySelector('label');
+            if (lbl && lbl.textContent.trim()) {
+                labels.push(lbl.textContent.trim());
+            }
+            parent = parent.parentElement;
+        }
+        elements.push({
+            tag: el.tagName.toLowerCase(),
+            id: el.id || null,
+            name: el.getAttribute('name') || null,
+            type: el.getAttribute('type') || null,
+            placeholder: el.getAttribute('placeholder') || null,
+            aria_label: el.getAttribute('aria-label') || null,
+            text: (el.textContent || '').trim()
+                .substring(0, 100) || null,
+            role: el.getAttribute('role') || null,
+            css_selector: cssSel || null,
+            xpath: null,
+            nearby_labels: labels.length ? labels : null,
+        });
     }
-    return elements;
-    """.replace("MAX", str(max_elements))
+}
+return elements;
+"""
 
+
+def collect_dom_elements(
+    driver: WebDriver, max_elements: int = 80
+) -> list[dict]:
+    script = JS_COLLECT_DOM.replace("MAX", str(max_elements))
     try:
         result = driver.execute_script(script)
         return result if result else []
@@ -184,16 +224,19 @@ def collect_dom_elements(driver: WebDriver, max_elements: int = 80) -> list[dict
         return []
 
 
+CAPTCHA_INDICATORS = [
+    "captcha", "recaptcha", "hcaptcha", "cf-challenge",
+    "verify you are human", "unusual traffic", "access denied",
+    "rate limit", "security check", "please wait",
+    "cloudflare", "challenge-platform", "g-recaptcha",
+    "h-captcha",
+]
+
+
 def detect_captcha(driver: WebDriver) -> bool:
-    captcha_indicators = [
-        "captcha", "recaptcha", "hcaptcha", "cf-challenge",
-        "verify you are human", "unusual traffic", "access denied",
-        "rate limit", "security check", "please wait", "cloudflare",
-        "challenge-platform", "g-recaptcha", "h-captcha",
-    ]
     try:
         page_source = driver.page_source.lower()
-        for indicator in captcha_indicators:
+        for indicator in CAPTCHA_INDICATORS:
             if indicator in page_source:
                 return True
 
@@ -201,8 +244,10 @@ def detect_captcha(driver: WebDriver) -> bool:
         for iframe in iframes:
             src = iframe.get_attribute("src") or ""
             title = iframe.get_attribute("title") or ""
-            if any(ind in (src + title).lower() for ind in ["captcha", "recaptcha", "hcaptcha", "challenge"]):
+            combined = (src + title).lower()
+            checks = ["captcha", "recaptcha", "hcaptcha"]
+            if any(c in combined for c in checks):
                 return True
     except (WebDriverException, AttributeError) as e:
-        logger.debug("CAPTCHA detection error (ignored): %s", e)
+        logger.debug("CAPTCHA detection error: %s", e)
     return False

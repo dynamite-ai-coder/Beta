@@ -5,12 +5,16 @@ Authorized browser testing and QA automation tool with AI-powered element identi
 ## Architecture
 
 ```
-GitHub → Render (Docker)
+GitHub -> Render (Docker)
 ├── FastAPI Backend (Python 3.11+)
 │   ├── Selenium-controlled Chromium
-│   ├── AI Element Identification (Groq)
-│   ├── Task Management
-│   └── Browser Preview/Streaming
+│   ├── AI Element Identification (Groq/OpenAI/Anthropic/Ollama)
+│   ├── Task Management (in-memory + optional DB)
+│   ├── Task Scheduling (cron-based)
+│   ├── WebSocket Real-time Updates
+│   ├── Browser Preview/Streaming
+│   ├── Prometheus Metrics
+│   └── Web Dashboard
 └── CLI Client (Python)
 ```
 
@@ -18,34 +22,43 @@ GitHub → Render (Docker)
 
 ```
 backend/
-├── main.py              # FastAPI application
-├── config.py            # Configuration management
+├── main.py                  # FastAPI application
+├── config.py                # Configuration management
+├── database.py              # SQLAlchemy async engine
 ├── api/
-│   └── routes.py        # API endpoints
+│   └── routes.py            # API endpoints + WebSocket
 ├── browser/
-│   ├── driver.py        # Selenium browser control
-│   └── agent.py         # Browser automation agent
+│   ├── driver.py            # Selenium browser control
+│   └── agent.py             # Browser automation agent
 ├── ai/
-│   ├── provider.py      # AI/Groq provider
-│   └── identifier.py    # Element identification
+│   ├── providers.py         # Multi-provider AI (Groq, OpenAI, Anthropic, Ollama)
+│   ├── provider.py          # Provider factory
+│   └── identifier.py        # Element identification
 ├── tasks/
-│   └── manager.py       # Task lifecycle management
+│   ├── manager.py           # Task lifecycle management
+│   ├── repository.py        # Database repository (optional)
+│   └── scheduler.py         # Cron-based task scheduling
 ├── security/
-│   └── auth.py          # Authentication & security
+│   └── auth.py              # Authentication & rate limiting
 ├── streaming/
-│   └── preview.py       # Browser preview streaming
+│   ├── preview.py           # Browser preview streaming
+│   └── websocket.py         # WebSocket connection manager
+├── monitoring/
+│   └── metrics.py           # Prometheus metrics
 ├── models/
-│   └── schemas.py       # Pydantic models
-└── utils/
+│   ├── schemas.py           # Pydantic models
+│   └── database.py          # SQLAlchemy models
+└── static/
+    └── index.html           # Web dashboard
 client/
-├── main.py              # CLI entry point
-├── api_client.py        # API client
-├── ui.py                # Terminal UI
-└── config.py            # Client configuration
+├── main.py                  # CLI entry point + interactive menu
+├── api_client.py            # API client with all endpoints
+├── ui.py                    # Terminal UI
+└── config.py                # Client configuration
 tests/
-├── test_backend.py      # Backend unit tests
-├── test_api.py          # API integration tests
-└── mock_login.html      # Mock login page for testing
+├── test_backend.py          # Backend unit tests
+├── test_api.py              # API integration tests
+└── mock_login.html          # Mock login page for testing
 ```
 
 ## Local Setup
@@ -65,7 +78,7 @@ pip install -r requirements.txt
 
 # Copy environment variables
 cp .env.example .env
-# Edit .env with your GROQ_API_KEY
+# Edit .env with your API keys
 
 # Start the backend
 uvicorn backend.main:app --reload
@@ -82,7 +95,7 @@ docker build -t browser-automation .
 
 # Run the container
 docker run -p 8000:8000 \
-  -e GROQ_API_KEY=your_key \
+  -e AI_API_KEY=your_key \
   -e API_AUTH_TOKEN=your_token \
   browser-automation
 ```
@@ -102,8 +115,11 @@ docker run -p 8000:8000 \
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `GROQ_API_KEY` | Groq API key for AI | - |
-| `GROQ_MODEL` | Groq model name | `llama-3.1-8b-instant` |
+| `AI_API_KEY` | API key for AI provider | - |
+| `AI_MODEL` | AI model name | `llama-3.1-8b-instant` |
+| `AI_BASE_URL` | AI provider base URL | `https://api.groq.com/openai/v1` |
+| `AI_PROVIDER` | Provider type (groq/openai/anthropic/ollama) | `groq` |
+| `DATABASE_URL` | Database connection string | `sqlite+aiosqlite:///./browser_automation.db` |
 | `API_AUTH_TOKEN` | API authentication token | - |
 | `ALLOWED_DOMAINS` | Comma-separated allowed domains | - |
 | `BROWSER_SESSION_TIMEOUT` | Browser session timeout (s) | `600` |
@@ -115,25 +131,42 @@ docker run -p 8000:8000 \
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| GET | `/` | Web dashboard |
 | GET | `/health` | Health check |
+| GET | `/metrics` | Prometheus metrics |
 | POST | `/api/v1/task` | Create automation task |
 | GET | `/api/v1/task/{id}` | Get task status |
+| GET | `/api/v1/tasks` | List all tasks |
 | GET | `/api/v1/task/{id}/events` | Get task events |
 | GET | `/api/v1/task/{id}/preview` | Browser preview stream |
 | POST | `/api/v1/task/{id}/manual-action` | Continue after manual action |
 | POST | `/api/v1/task/{id}/stop` | Stop task |
+| POST | `/api/v1/scheduled-task` | Create scheduled task |
+| GET | `/api/v1/scheduled-tasks` | List scheduled tasks |
+| DELETE | `/api/v1/scheduled-task/{id}` | Delete scheduled task |
+| POST | `/api/v1/scheduled-task/{id}/enable` | Enable scheduled task |
+| POST | `/api/v1/scheduled-task/{id}/disable` | Disable scheduled task |
+| WS | `/api/v1/ws/task/{id}` | WebSocket for task updates |
+| WS | `/api/v1/ws/tasks` | WebSocket for all tasks |
 
 ## Client Usage
 
 ```bash
+# Interactive mode (default)
 python -m client.main
+
+# Direct commands
+python -m client.main --mode run
+python -m client.main --mode list
+python -m client.main --mode metrics
 ```
 
-The client will:
-1. Connect to the backend
-2. Ask for target URL, username, and password
-3. Create and monitor an automation task
-4. Display progress and results
+The interactive client provides:
+1. Run automation tasks
+2. List tasks with state filtering
+3. Manage scheduled tasks (CRUD)
+4. View Prometheus metrics
+5. Stop running tasks
 
 ## Security Model
 
@@ -168,19 +201,20 @@ pytest tests/test_backend.py -v
 pytest tests/ --cov=backend --cov-report=html
 ```
 
+## Monitoring
+
+The `/metrics` endpoint exposes Prometheus-compatible metrics:
+
+- `http_requests_total` - Total HTTP requests
+- `http_request_duration_seconds` - Request latency
+- `active_tasks` - Tasks by state
+- `browser_sessions` - Active browser sessions
+- `websocket_connections` - Active WebSocket connections
+
 ## Limitations
 
 - Requires Chrome/Chromium installed
-- Groq API key required for AI element identification
-- Browser preview requires direct HTTP access (may not work through some proxies)
+- AI API key required for AI element identification
+- Browser preview requires direct HTTP access
 - Headless mode only in production
-- No persistent task storage (in-memory)
-
-## Recommended Next Steps
-
-- Add PostgreSQL for persistent task storage
-- Implement WebSocket for real-time updates
-- Add more AI provider support
-- Implement task scheduling
-- Add authentication UI
-- Add monitoring/metrics
+- SQLite by default (use PostgreSQL for production)

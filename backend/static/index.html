@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Automation API - Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        header { background: #16213e; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        h1 { font-size: 1.5rem; }
+        .auth-section { background: #0f3460; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .auth-section h2 { margin-bottom: 15px; font-size: 1.2rem; }
+        input, select, button { padding: 10px; border: none; border-radius: 4px; margin-right: 10px; margin-bottom: 10px; }
+        input { background: #1a1a2e; color: #eee; width: 300px; }
+        button { background: #e94560; color: white; cursor: pointer; font-weight: bold; }
+        button:hover { background: #c73e54; }
+        button.secondary { background: #533483; }
+        button.secondary:hover { background: #7b2d8e; }
+        .status { padding: 10px; border-radius: 4px; margin-bottom: 10px; display: none; }
+        .status.success { display: block; background: #1b4332; color: #95d5b2; }
+        .status.error { display: block; background: #5c1a1a; color: #f5a3a3; }
+        .tasks-table { width: 100%; border-collapse: collapse; background: #16213e; border-radius: 8px; overflow: hidden; }
+        .tasks-table th, .tasks-table td { padding: 12px; text-align: left; border-bottom: 1px solid #1a1a2e; }
+        .tasks-table th { background: #0f3460; font-weight: 600; }
+        .tasks-table tr:hover { background: #1a1a2e; }
+        .state-badge { padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
+        .state-QUEUED { background: #533483; }
+        .state-RUNNING { background: #0f3460; color: #4cc9f0; }
+        .state-SUCCESS { background: #1b4332; color: #95d5b2; }
+        .state-FAILURE { background: #5c1a1a; color: #f5a3a3; }
+        .state-WAITING { background: #5c4813; color: #f5d7a3; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: #16213e; padding: 20px; border-radius: 8px; }
+        .card h3 { margin-bottom: 15px; color: #4cc9f0; }
+        .metric { font-size: 2rem; font-weight: bold; color: #e94560; }
+        #ws-status { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-left: 10px; }
+        #ws-status.connected { background: #95d5b2; }
+        #ws-status.disconnected { background: #f5a3a3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Browser Automation API <span id="ws-status" class="disconnected"></span></h1>
+            <div>
+                <button onclick="refreshTasks()">Refresh</button>
+                <button class="secondary" onclick="logout()">Logout</button>
+            </div>
+        </header>
+
+        <div class="auth-section">
+            <h2>Authentication</h2>
+            <input type="password" id="api-token" placeholder="API Token">
+            <button onclick="authenticate()">Connect</button>
+            <div id="auth-status" class="status"></div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>Create Task</h3>
+                <input type="text" id="target-url" placeholder="Target URL"><br>
+                <input type="text" id="username" placeholder="Username"><br>
+                <input type="password" id="password" placeholder="Password"><br>
+                <input type="text" id="instruction" placeholder="Instruction (optional)"><br>
+                <button onclick="createTask()">Create Task</button>
+                <div id="create-status" class="status"></div>
+            </div>
+
+            <div class="card">
+                <h3>Quick Stats</h3>
+                <div class="metric" id="total-tasks">0</div>
+                <p>Total Tasks</p>
+                <div class="metric" id="running-tasks" style="color: #4cc9f0;">0</div>
+                <p>Running</p>
+            </div>
+        </div>
+
+        <h2 style="margin: 20px 0 10px;">Tasks</h2>
+        <table class="tasks-table">
+            <thead>
+                <tr>
+                    <th>Task ID</th>
+                    <th>State</th>
+                    <th>Target URL</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tasks-body">
+                <tr><td colspan="5">No tasks yet</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        let apiToken = '';
+        let ws = null;
+
+        function authenticate() {
+            apiToken = document.getElementById('api-token').value;
+            if (!apiToken) {
+                showStatus('auth-status', 'Please enter a token', 'error');
+                return;
+            }
+            showStatus('auth-status', 'Connected!', 'success');
+            connectWebSocket();
+            refreshTasks();
+        }
+
+        function logout() {
+            apiToken = '';
+            if (ws) ws.close();
+            document.getElementById('ws-status').className = 'disconnected';
+            showStatus('auth-status', 'Logged out', 'error');
+        }
+
+        function connectWebSocket() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${location.host}/api/v1/ws/tasks`);
+            ws.onopen = () => {
+                document.getElementById('ws-status').className = 'connected';
+            };
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.event === 'tasks_update') {
+                    updateTasksUI(data.data);
+                }
+            };
+            ws.onclose = () => {
+                document.getElementById('ws-status').className = 'disconnected';
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        async function createTask() {
+            const body = {
+                target_url: document.getElementById('target-url').value,
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value,
+                natural_language_instruction: document.getElementById('instruction').value || 'Log in with the provided credentials'
+            };
+            try {
+                const res = await fetch('/api/v1/task', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiToken}`
+                    },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showStatus('create-status', `Task created: ${data.task_id}`, 'success');
+                    refreshTasks();
+                } else {
+                    showStatus('create-status', data.detail || 'Error', 'error');
+                }
+            } catch (e) {
+                showStatus('create-status', 'Network error', 'error');
+            }
+        }
+
+        async function refreshTasks() {
+            try {
+                const res = await fetch('/api/v1/tasks', {
+                    headers: { 'Authorization': `Bearer ${apiToken}` }
+                });
+                const tasks = await res.json();
+                updateTasksUI(tasks);
+            } catch (e) {}
+        }
+
+        function updateTasksUI(tasks) {
+            const tbody = document.getElementById('tasks-body');
+            if (!tasks.length) {
+                tbody.innerHTML = '<tr><td colspan="5">No tasks yet</td></tr>';
+                return;
+            }
+            document.getElementById('total-tasks').textContent = tasks.length;
+            document.getElementById('running-tasks').textContent = tasks.filter(t => t.state === 'RUNNING').length;
+            tbody.innerHTML = tasks.map(t => `
+                <tr>
+                    <td>${t.task_id.substring(0, 8)}...</td>
+                    <td><span class="state-badge state-${t.state}">${t.state}</span></td>
+                    <td>${t.target_url}</td>
+                    <td>${new Date(t.created_at).toLocaleString()}</td>
+                    <td>
+                        <button class="secondary" onclick="stopTask('${t.task_id}')">Stop</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function stopTask(taskId) {
+            await fetch(`/api/v1/task/${taskId}/stop`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${apiToken}` }
+            });
+            refreshTasks();
+        }
+
+        function showStatus(elementId, message, type) {
+            const el = document.getElementById(elementId);
+            el.textContent = message;
+            el.className = `status ${type}`;
+        }
+    </script>
+</body>
+</html>

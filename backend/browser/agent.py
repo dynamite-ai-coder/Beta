@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import (
+    TimeoutException,
+    WebDriverException,
+)
 
 from backend.ai.identifier import ElementIdentifier
 from backend.browser.driver import (
@@ -35,12 +38,16 @@ Rules:
 - Never expose credentials in actions
 - Request manual action for CAPTCHAs
 - Stop when login succeeds or clearly fails
-- Respond ONLY with valid JSON: {"action": "...", "selector": "...", "value": "...", "url": "...", "reason": "..."}
+- Respond ONLY with valid JSON
 """
 
 
 class BrowserAgent:
-    def __init__(self, task_id: str, ai_identifier: ElementIdentifier) -> None:
+    def __init__(
+        self,
+        task_id: str,
+        ai_identifier: ElementIdentifier,
+    ) -> None:
         self.task_id = task_id
         self._ai = ai_identifier
         self._driver = None
@@ -66,7 +73,7 @@ class BrowserAgent:
             try:
                 self._driver.quit()
             except (OSError, WebDriverException) as e:
-                logger.debug("Browser close error (ignored): %s", e)
+                logger.debug("Browser close error: %s", e)
             self._driver = None
 
     async def execute_login(
@@ -90,26 +97,37 @@ class BrowserAgent:
 
         try:
             if not navigate_safe(self._driver, target_url):
-                result["reason"] = "Failed to navigate to target URL"
+                result["reason"] = "Failed to navigate"
                 return result
 
             if detect_captcha(self._driver):
                 self._state = TaskState.WAITING_FOR_MANUAL_ACTION
-                result["state"] = TaskState.WAITING_FOR_MANUAL_ACTION
-                result["reason"] = "CAPTCHA or anti-bot protection detected. Manual action required."
+                result["state"] = (
+                    TaskState.WAITING_FOR_MANUAL_ACTION
+                )
+                result["reason"] = (
+                    "CAPTCHA detected. Manual action required."
+                )
                 return result
 
+            elements = self._extract_elements()
             selectors = await self._ai.identify_elements(
-                [type(e).__module__ == "__main__" and e or e for e in self._extract_elements()]
+                elements
             )
 
             if not selectors:
-                result["reason"] = "AI could not identify page elements"
+                result["reason"] = (
+                    "AI could not identify page elements"
+                )
                 return result
 
-            filled = await self._fill_and_submit(selectors, username, password)
+            filled = await self._fill_and_submit(
+                selectors, username, password
+            )
             if not filled:
-                result["reason"] = "Failed to fill or submit login form"
+                result["reason"] = (
+                    "Failed to fill or submit login form"
+                )
                 return result
 
             self._driver.implicitly_wait(3)
@@ -117,21 +135,27 @@ class BrowserAgent:
 
             if detect_captcha(self._driver):
                 self._state = TaskState.WAITING_FOR_MANUAL_ACTION
-                result["state"] = TaskState.WAITING_FOR_MANUAL_ACTION
-                result["reason"] = "CAPTCHA detected after login attempt"
+                result["state"] = (
+                    TaskState.WAITING_FOR_MANUAL_ACTION
+                )
+                result["reason"] = (
+                    "CAPTCHA after login attempt"
+                )
                 return result
 
             if self._detect_login_success():
                 self._state = TaskState.SUCCESS
                 result["state"] = TaskState.SUCCESS
                 result["result"] = "Login successful"
-                result["reason"] = "Successfully authenticated"
+                result["reason"] = "Authenticated"
             else:
                 self._state = TaskState.FAILURE
                 result["state"] = TaskState.FAILURE
-                result["reason"] = "Login failed - could not confirm success"
+                result["reason"] = "Login failed"
 
-        except (OSError, WebDriverException, TimeoutException) as e:
+        except (
+            OSError, WebDriverException, TimeoutException
+        ) as e:
             logger.error("Login execution failed: %s", e)
             self._state = TaskState.FAILURE
             result["reason"] = f"Error: {e!s}"
@@ -144,18 +168,25 @@ class BrowserAgent:
         return [DOMElement(**el) for el in raw]
 
     async def _fill_and_submit(
-        self, selectors: AISelectors, username: str, password: str
+        self,
+        selectors: AISelectors,
+        username: str,
+        password: str,
     ) -> bool:
         from selenium.webdriver.common.by import By
-        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.webdriver.support import (
+            expected_conditions as EC,
+        )
         from selenium.webdriver.support.ui import WebDriverWait
 
         try:
             wait = WebDriverWait(self._driver, 10)
 
-            user_field = wait.until(EC.presence_of_element_located(
-                (By.CSS_SELECTOR, selectors.username_selector)
-            ))
+            user_field = wait.until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, selectors.username_selector)
+                )
+            )
             user_field.clear()
             user_field.send_keys(username)
 
@@ -171,7 +202,9 @@ class BrowserAgent:
             submit_btn.click()
 
             return True
-        except (OSError, WebDriverException, TimeoutException) as e:
+        except (
+            OSError, WebDriverException, TimeoutException
+        ) as e:
             logger.error("Fill and submit failed: %s", e)
             return False
 
@@ -180,12 +213,14 @@ class BrowserAgent:
         page_source = self._driver.page_source.lower()
 
         success_indicators = [
-            "dashboard", "welcome", "home", "account", "profile",
-            "logout", "sign out", "settings", "my-account",
+            "dashboard", "welcome", "home",
+            "account", "profile", "logout",
+            "sign out", "settings", "my-account",
         ]
         failure_indicators = [
-            "invalid", "incorrect", "failed", "error", "wrong",
-            "unauthorized", "denied", "try again",
+            "invalid", "incorrect", "failed",
+            "error", "wrong", "unauthorized",
+            "denied", "try again",
         ]
 
         for ind in success_indicators:

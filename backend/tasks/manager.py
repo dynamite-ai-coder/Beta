@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from selenium.common.exceptions import TimeoutException, WebDriverException
 
 from backend.ai.identifier import ElementIdentifier
-from backend.ai.provider import AIProvider
+from backend.ai.provider import get_ai_provider
 from backend.browser.agent import BrowserAgent
 from backend.config import settings
 from backend.models.schemas import TaskState
@@ -22,7 +22,7 @@ class TaskManager:
         self._tasks: dict[str, dict] = {}
         self._agents: dict[str, BrowserAgent] = {}
         self._events: dict[str, list[dict]] = {}
-        self._ai_provider = AIProvider()
+        self._ai_provider = get_ai_provider()
         self._ai_identifier = ElementIdentifier(self._ai_provider)
         self._lock = asyncio.Lock()
 
@@ -60,16 +60,30 @@ class TaskManager:
     def get_events(self, task_id: str) -> list[dict]:
         return self._events.get(task_id, [])
 
-    async def update_task_state(self, task_id: str, state: TaskState, reason: str | None = None) -> None:
+    async def update_task_state(
+        self,
+        task_id: str,
+        state: TaskState,
+        reason: str | None = None,
+    ) -> None:
         async with self._lock:
             if task_id in self._tasks:
                 self._tasks[task_id]["state"] = state
-                self._tasks[task_id]["updated_at"] = datetime.now(timezone.utc)
+                self._tasks[task_id]["updated_at"] = (
+                    datetime.now(timezone.utc)
+                )
                 if reason:
                     self._tasks[task_id]["reason"] = reason
-                self._add_event(task_id, "state_change", state.value)
+                self._add_event(
+                    task_id, "state_change", state.value
+                )
 
-    def _add_event(self, task_id: str, event: str, data: str | None = None) -> None:
+    def _add_event(
+        self,
+        task_id: str,
+        event: str,
+        data: str | None = None,
+    ) -> None:
         if task_id in self._events:
             self._events[task_id].append({
                 "event": event,
@@ -101,7 +115,9 @@ class TaskManager:
             )
 
             final_state = result.get("state", TaskState.FAILURE)
-            await self.update_task_state(task_id, final_state, result.get("reason"))
+            await self.update_task_state(
+                task_id, final_state, result.get("reason")
+            )
 
             task["result"] = result.get("result")
             task["reason"] = result.get("reason")
@@ -109,21 +125,35 @@ class TaskManager:
             if final_state == TaskState.SUCCESS:
                 screenshot = agent.take_screenshot()
                 if screenshot:
-                    path = self._save_screenshot(task_id, task["username"], screenshot)
+                    path = self._save_screenshot(
+                        task_id, task["username"], screenshot
+                    )
                     task["screenshot_path"] = path
-                    self._add_event(task_id, "screenshot_saved", path)
+                    self._add_event(
+                        task_id, "screenshot_saved", path
+                    )
 
-            self._add_event(task_id, "task_completed", final_state.value)
+            self._add_event(
+                task_id, "task_completed", final_state.value
+            )
+            self.save_result(task_id)
 
-        except (OSError, WebDriverException, TimeoutException, ValueError) as e:
+        except (
+            OSError, WebDriverException,
+            TimeoutException, ValueError,
+        ) as e:
             logger.error("Task execution error: %s", e)
-            await self.update_task_state(task_id, TaskState.FAILURE, str(e))
+            await self.update_task_state(
+                task_id, TaskState.FAILURE, str(e)
+            )
         finally:
             agent.close_browser()
             async with self._lock:
                 self._agents.pop(task_id, None)
 
-    def _save_screenshot(self, task_id: str, username: str, data: bytes) -> str:
+    def _save_screenshot(
+        self, task_id: str, username: str, data: bytes
+    ) -> str:
         os.makedirs(settings.img_dir, exist_ok=True)
         from backend.security.auth import sanitize_filename
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -138,15 +168,22 @@ class TaskManager:
         agent = self._agents.get(task_id)
         if agent:
             agent.close_browser()
-            await self.update_task_state(task_id, TaskState.STOPPED, "Stopped by user")
+            await self.update_task_state(
+                task_id, TaskState.STOPPED, "Stopped by user"
+            )
             self._add_event(task_id, "task_stopped")
+            self.save_result(task_id)
             return True
         return False
 
     async def manual_action_continue(self, task_id: str) -> bool:
         task = self._tasks.get(task_id)
         if task and task["state"] == TaskState.WAITING_FOR_MANUAL_ACTION:
-            await self.update_task_state(task_id, TaskState.RUNNING, "Resumed after manual action")
+            await self.update_task_state(
+                task_id,
+                TaskState.RUNNING,
+                "Resumed after manual action",
+            )
             self._add_event(task_id, "manual_action_resumed")
             return True
         return False
@@ -164,12 +201,16 @@ class TaskManager:
         if not task:
             return
 
+        state = task["state"]
+        state_val = (
+            state.value if isinstance(state, TaskState) else state
+        )
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "target_url": task["target_url"],
             "username": task["username"],
             "task_id": task_id,
-            "state": task["state"].value if isinstance(task["state"], TaskState) else task["state"],
+            "state": state_val,
             "reason": task.get("reason"),
             "screenshot_path": task.get("screenshot_path"),
         }

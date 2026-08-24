@@ -165,26 +165,26 @@ class TestTaskState:
 
 class TestAIResponseParsing:
     def test_parse_valid_json(self):
-        from backend.ai.provider import AIProvider
+        from backend.ai.providers import GroqProvider
 
-        provider = AIProvider()
+        provider = GroqProvider(api_key="test", model="test", base_url="http://test")
         json_str = '{"username_selector": "#user", "password_selector": "#pass", "submit_selector": "button", "confidence": 0.9, "reason": "test"}'
         result = provider._parse_json_response(json_str)
         assert result is not None
         assert result.username_selector == "#user"
 
     def test_parse_json_with_code_block(self):
-        from backend.ai.provider import AIProvider
+        from backend.ai.providers import GroqProvider
 
-        provider = AIProvider()
+        provider = GroqProvider(api_key="test", model="test", base_url="http://test")
         json_str = '```json\n{"username_selector": "#user", "password_selector": "#pass", "submit_selector": "button", "confidence": 0.9, "reason": "test"}\n```'
         result = provider._parse_json_response(json_str)
         assert result is not None
 
     def test_parse_invalid_json(self):
-        from backend.ai.provider import AIProvider
+        from backend.ai.providers import GroqProvider
 
-        provider = AIProvider()
+        provider = GroqProvider(api_key="test", model="test", base_url="http://test")
         result = provider._parse_json_response("not json at all")
         assert result is None
 
