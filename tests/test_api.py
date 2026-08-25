@@ -271,4 +271,88 @@ class TestDashboard:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/health")
             data = response.json()
-            assert data["version"] == "1.1.0"
+            assert data["version"] == "2.0.0"
+
+
+class TestVirtualAIAPI:
+    @pytest.mark.anyio
+    async def test_list_models(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/v1/models")
+            assert response.status_code == 200
+            data = response.json()
+            assert "data" in data
+            assert len(data["data"]) > 0
+            assert data["data"][0]["id"] == "beta-virtual-ai"
+
+    @pytest.mark.anyio
+    async def test_chat_completions_no_auth(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "beta-virtual-ai",
+                    "messages": [{"role": "user", "content": "Hello"}],
+                },
+            )
+            assert response.status_code in (200, 401)
+
+    @pytest.mark.anyio
+    async def test_chat_completions_wrong_model(self, auth_headers):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "wrong-model",
+                    "messages": [{"role": "user", "content": "Hello"}],
+                },
+                headers=auth_headers,
+            )
+            assert response.status_code == 400
+
+    @pytest.mark.anyio
+    async def test_chat_completions_empty_messages(self, auth_headers):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "beta-virtual-ai",
+                    "messages": [],
+                },
+                headers=auth_headers,
+            )
+            assert response.status_code == 400
+
+
+class TestClientAPI:
+    @pytest.mark.anyio
+    async def test_client_status_empty(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/clients/status")
+            assert response.status_code == 200
+            assert isinstance(response.json(), list)
+
+    @pytest.mark.anyio
+    async def test_register_client(self, auth_headers):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/clients/register",
+                json={"client_id": "test-client", "token": settings.api_auth_token},
+                headers=auth_headers,
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "registered"
+
+    @pytest.mark.anyio
+    async def test_get_ready_client_none(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/clients/ready")
+            assert response.status_code == 404

@@ -16,7 +16,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from backend.config import is_url_allowed
+from backend.config import is_url_allowed, settings
 from backend.models.schemas import (
     ManualActionRequest,
     TaskRequest,
@@ -27,9 +27,19 @@ from backend.security.auth import create_session_token, verify_api_key
 from backend.streaming.preview import preview_streamer
 from backend.streaming.websocket import ws_manager
 from backend.tasks.scheduler import scheduler
+from backend.ai.models import VirtualAIRequest
+from backend.ai.orchestrator import orchestrator
+from backend.services.client_manager import client_manager
+from backend.services.ws_protocol import (
+    parse_message, msg_client_registered, msg_client_ready,
+    msg_browser_ready, msg_browser_error, msg_task_result,
+    msg_task_error, msg_task_cancel, msg_heartbeat,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+ai_router = APIRouter()
+client_router = APIRouter()
 
 DEFAULT_INSTRUCTION = "Log in with the provided credentials"
 
@@ -361,3 +371,182 @@ async def disable_scheduled_task(task_id: str) -> dict:
     raise HTTPException(
         status_code=404, detail="Scheduled task not found"
     )
+
+
+# ============================================================
+# VIRTUAL AI API (OpenAI-compatible)
+# ============================================================
+
+
+def _verify_beta_api_key(request: Request) -> bool:
+    if not settings.beta_api_key:
+        return True
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth[7:]
+        import secrets
+        return secrets.compare_digest(token, settings.beta_api_key)
+    return False
+
+
+@ai_router.post("/chat/completions")
+async def chat_completions(request: Request, req: VirtualAIRequest):
+    if not _verify_beta_api_key(request):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    if req.model != settings.virtual_model_name:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown model: {req.model}. Use {settings.virtual_model_name}",
+        )
+
+    if not req.messages:
+        raise HTTPException(status_code=400, detail="Messages required")
+
+    try:
+        response = await orchestrator.process(req)
+        return response.model_dump()
+    except RuntimeError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except Exception as e:
+        logger.error(f"AI workflow error: {e}")
+        raise HTTPException(status_code=500, detail="Internal AI error")
+
+
+@ai_router.get("/models")
+async def list_models():
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": settings.virtual_model_name,
+                "object": "model",
+                "created": 1700000000,
+                "owned_by": "beta-ai",
+            }
+        ],
+    }
+
+
+# ============================================================
+# CLIENT MANAGEMENT (Windows Browser Agent)
+# ============================================================
+
+
+@client_router.post("/register")
+async def register_client(request: Request):
+    body = await request.json()
+    client_id = body.get("client_id", "")
+    token = body.get("token", "")
+
+    if not client_id:
+        raise HTTPException(status_code=400, detail="client_id required")
+
+    if settings.api_auth_token and token != settings.api_auth_token:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    info = await client_manager.register_client(client_id, None)
+    return {"status": "registered", "client_id": info.client_id}
+
+
+@client_router.get("/status")
+async def client_status():
+    clients = client_manager.get_all_clients()
+    return [
+        {
+            "client_id": c.client_id,
+            "status": c.status,
+            "browser_status": c.browser_status,
+            "current_task": c.current_task,
+            "last_seen": c.last_seen.isoformat() if c.last_seen else None,
+        }
+        for c in clients
+    ]
+
+
+@client_router.get("/ready")
+async def get_ready_client():
+    cid = client_manager.get_ready_client()
+    if cid:
+        return {"client_id": cid}
+    raise HTTPException(status_code=404, detail="No ready client")
+
+
+@client_router.websocket("/ws/agent")
+async def websocket_agent(websocket: WebSocket):
+    await websocket.accept()
+
+    client_id = None
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+        msg = parse_message(raw)
+        if not msg or msg.get("type") != "CLIENT_REGISTER":
+            await websocket.close(code=4001, reason="Expected CLIENT_REGISTER")
+            return
+
+        client_id = msg.get("client_id", "")
+        token = msg.get("payload", {}).get("token", "")
+
+        if settings.api_auth_token and token != settings.api_auth_token:
+            await websocket.close(code=4003, reason="Unauthorized")
+            return
+
+        await client_manager.register_client(client_id, websocket)
+        await websocket.send_text(json.dumps(msg_client_registered(client_id)))
+
+        while True:
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                msg = parse_message(raw)
+                if not msg:
+                    continue
+
+                msg_type = msg.get("type", "")
+
+                if msg_type == "CLIENT_READY":
+                    await client_manager.update_client_status(client_id, browser_status="ready")
+                    logger.info(f"Client {client_id} browser ready")
+
+                elif msg_type == "BROWSER_READY":
+                    await client_manager.update_client_status(client_id, browser_status="ready")
+
+                elif msg_type == "BROWSER_ERROR":
+                    await client_manager.update_client_status(client_id, browser_status="error")
+                    error = msg.get("payload", {}).get("error", "unknown")
+                    task_id = msg.get("task_id")
+                    if task_id:
+                        await client_manager.release_task(client_id, task_id)
+
+                elif msg_type == "TASK_STARTED":
+                    task_id = msg.get("task_id", "")
+                    logger.info(f"Task {task_id} started by {client_id}")
+
+                elif msg_type == "TASK_PROGRESS":
+                    task_id = msg.get("task_id", "")
+                    logger.debug(f"Task {task_id} progress from {client_id}")
+
+                elif msg_type == "TASK_RESULT":
+                    task_id = msg.get("task_id", "")
+                    await client_manager.release_task(client_id, task_id)
+                    logger.info(f"Task {task_id} completed by {client_id}")
+
+                elif msg_type == "TASK_ERROR":
+                    task_id = msg.get("task_id", "")
+                    await client_manager.release_task(client_id, task_id)
+
+                elif msg_type == "CLIENT_HEARTBEAT":
+                    await client_manager.update_client_status(client_id)
+                    await websocket.send_text(json.dumps(msg_heartbeat("server")))
+
+            except asyncio.TimeoutError:
+                await websocket.send_text(json.dumps(msg_heartbeat("server")))
+
+    except asyncio.TimeoutError:
+        logger.warning("Agent registration timeout")
+    except WebSocketDisconnect:
+        logger.info(f"Agent {client_id} disconnected")
+    except Exception as e:
+        logger.error(f"Agent WebSocket error: {e}")
+    finally:
+        if client_id:
+            await client_manager.unregister_client(client_id)

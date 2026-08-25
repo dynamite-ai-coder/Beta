@@ -96,4 +96,9 @@ def update_task_metrics(task_manager) -> None:
     for state in TASK_STATES:
         ACTIVE_TASKS.labels(state=state).set(state_counts.get(state, 0))
 
-    BROWSER_SESSIONS.set(len(task_manager._agents))
+    from backend.services.client_manager import client_manager
+    ready_clients = sum(
+        1 for c in client_manager.get_all_clients()
+        if c.browser_status == "ready"
+    )
+    BROWSER_SESSIONS.set(ready_clients)

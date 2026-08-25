@@ -14,7 +14,7 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 
-from backend.api.routes import router
+from backend.api.routes import router, ai_router, client_router
 from backend.config import settings
 from backend.database import init_db
 from backend.models.schemas import HealthResponse
@@ -51,9 +51,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Browser Automation API",
-    description="Authorized browser testing tool",
-    version="1.1.0",
+    title="Beta Virtual AI API",
+    description="Multi-agent AI system with browser automation",
+    version="2.0.0",
     docs_url="/docs" if settings.debug else None,
     redoc_url=None,
     lifespan=lifespan,
@@ -75,6 +75,8 @@ if not settings.debug:
     app.middleware("http")(https_redirect_middleware)
 
 app.include_router(router, prefix="/api/v1")
+app.include_router(ai_router, prefix="/v1")
+app.include_router(client_router, prefix="/api/clients")
 
 static_dir = os.path.join(
     os.path.dirname(__file__), "static"
@@ -108,7 +110,7 @@ async def health_check() -> HealthResponse:
     update_task_metrics(task_manager)
     return HealthResponse(
         status="ok",
-        version="1.1.0",
+        version="2.0.0",
         timestamp=datetime.now(timezone.utc),
     )
 

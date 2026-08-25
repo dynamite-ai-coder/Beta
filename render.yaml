@@ -2,7 +2,7 @@ services:
   - type: web
     name: browser-automation
     runtime: docker
-    plan: starter
+    plan: free
     envVars:
       - key: AI_API_KEY
         sync: false
@@ -16,21 +16,43 @@ services:
         value: sqlite+aiosqlite:///./browser_automation.db
       - key: API_AUTH_TOKEN
         generateValue: true
+      - key: BETA_API_KEY
+        generateValue: true
+      - key: VIRTUAL_MODEL_NAME
+        value: beta-virtual-ai
+      - key: MAX_AI_WORKFLOWS
+        value: "1"
+      - key: MAX_DELIBERATION_ROUNDS
+        value: "2"
+      - key: GROQ_AGENT_1_API_KEY
+        sync: false
+      - key: GROQ_AGENT_1_MODEL
+        value: llama-3.1-8b-instant
+      - key: GROQ_AGENT_2_API_KEY
+        sync: false
+      - key: GROQ_AGENT_2_MODEL
+        value: llama-3.1-8b-instant
+      - key: GROQ_AGENT_3_API_KEY
+        sync: false
+      - key: GROQ_AGENT_3_MODEL
+        value: llama-3.1-8b-instant
+      - key: GROQ_AGENT_4_API_KEY
+        sync: false
+      - key: GROQ_AGENT_4_MODEL
+        value: llama-3.1-8b-instant
+      - key: GROQ_AGENT_5_API_KEY
+        sync: false
+      - key: GROQ_AGENT_5_MODEL
+        value: llama-3.1-8b-instant
       - key: ALLOWED_DOMAINS
         value: ""
-      - key: BROWSER_SESSION_TIMEOUT
-        value: 600
       - key: TASK_TIMEOUT
         value: 300
-      - key: HEADLESS
-        value: "true"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "30"
       - key: PREVIEW_ENABLED
         value: "true"
       - key: PREVIEW_TOKEN_SECRET
         generateValue: true
-      - key: RATE_LIMIT_PER_MINUTE
-        value: "30"
       - key: DEBUG
-        value: "false"
-      - key: PROXY_ENABLED
         value: "false"

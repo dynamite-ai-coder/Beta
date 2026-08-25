@@ -13,11 +13,41 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
-    # AI
+    # AI (legacy single-agent - still used as fallback)
     ai_api_key: str = ""
     ai_model: str = "llama-3.1-8b-instant"
     ai_base_url: str = "https://api.groq.com/openai/v1"
     ai_provider: str = "groq"
+
+    # Virtual AI API
+    beta_api_key: str = ""
+    virtual_model_name: str = "beta-virtual-ai"
+    max_ai_workflows: int = 1
+    max_deliberation_rounds: int = 2
+    max_context_size: int = 8000
+    max_agent_output_size: int = 4096
+    max_evidence_items: int = 10
+
+    # Multi-agent Groq configuration
+    groq_agent_1_api_key: str = ""
+    groq_agent_1_model: str = "llama-3.1-8b-instant"
+    groq_agent_1_base_url: str = "https://api.groq.com/openai/v1"
+
+    groq_agent_2_api_key: str = ""
+    groq_agent_2_model: str = "llama-3.1-8b-instant"
+    groq_agent_2_base_url: str = "https://api.groq.com/openai/v1"
+
+    groq_agent_3_api_key: str = ""
+    groq_agent_3_model: str = "llama-3.1-8b-instant"
+    groq_agent_3_base_url: str = "https://api.groq.com/openai/v1"
+
+    groq_agent_4_api_key: str = ""
+    groq_agent_4_model: str = "llama-3.1-8b-instant"
+    groq_agent_4_base_url: str = "https://api.groq.com/openai/v1"
+
+    groq_agent_5_api_key: str = ""
+    groq_agent_5_model: str = "llama-3.1-8b-instant"
+    groq_agent_5_base_url: str = "https://api.groq.com/openai/v1"
 
     # Database
     database_url: str = (
@@ -32,7 +62,7 @@ class Settings(BaseSettings):
     max_request_size: int = 10_485_760
     rate_limit_per_minute: int = 30
 
-    # Browser
+    # Browser (Windows client only)
     browser_executable: str | None = None
     headless: bool = True
 
@@ -40,7 +70,7 @@ class Settings(BaseSettings):
     proxy_enabled: bool = False
     proxy_secret: str = ""
     proxy_apikey: str = ""
-    proxy_url: str = "http://01a03626-786e-79a1-9d39-8d77a7fcf978:01a03626-786e-79a1-9d39-8d77a8bb0953@proxy-us.proxy-cheap.com:5959"
+    proxy_url: str = ""
 
     # Preview
     preview_enabled: bool = True
@@ -60,6 +90,7 @@ class Settings(BaseSettings):
     def model_post_init(self, __context: object) -> None:
         import os
         self.api_auth_token = self.api_auth_token.strip()
+        self.beta_api_key = self.beta_api_key.strip()
         self.ai_api_key = self.ai_api_key.strip()
         self.ai_model = self.ai_model.strip()
         self.ai_base_url = self.ai_base_url.strip()
@@ -67,6 +98,7 @@ class Settings(BaseSettings):
         self.proxy_secret = self.proxy_secret.strip()
         self.proxy_apikey = self.proxy_apikey.strip()
         self.proxy_url = self.proxy_url.strip()
+
         if not self.proxy_secret:
             self.proxy_secret = os.environ.get(
                 "PROXY_SECRET", os.environ.get("MOKE_SECRET", "")
@@ -81,19 +113,48 @@ class Settings(BaseSettings):
                 f":{self.proxy_secret}"
                 f"@proxy-us.proxy-cheap.com:5959"
             )
+
         if not self.ai_api_key:
-            self.ai_api_key = os.environ.get(
-                "GROQ_API_KEY", ""
-            )
+            self.ai_api_key = os.environ.get("GROQ_API_KEY", "")
+        if not self.beta_api_key:
+            self.beta_api_key = os.environ.get("BETA_API_KEY", self.api_auth_token)
+
         if self.ai_model == "llama-3.1-8b-instant":
             groq_model = os.environ.get("GROQ_MODEL")
             if groq_model:
                 self.ai_model = groq_model
-        default_url = "https://api.groq.com/openai/v1"
-        if self.ai_base_url == default_url:
-            groq_key = os.environ.get("GROQ_API_KEY")
-            if groq_key and not self.ai_api_key:
-                self.ai_base_url = default_url
+
+        agent_keys = [
+            "groq_agent_1_api_key", "groq_agent_2_api_key",
+            "groq_agent_3_api_key", "groq_agent_4_api_key",
+            "groq_agent_5_api_key",
+        ]
+        for i, key in enumerate(agent_keys, 1):
+            env_key = f"GROQ_AGENT_{i}_API_KEY"
+            val = getattr(self, key)
+            if not val:
+                setattr(self, key, os.environ.get(env_key, self.ai_api_key))
+            env_model = f"GROQ_AGENT_{i}_MODEL"
+            model_key = f"groq_agent_{i}_model"
+            model_val = getattr(self, model_key)
+            if model_val == "llama-3.1-8b-instant":
+                env_m = os.environ.get(env_model)
+                if env_m:
+                    setattr(self, model_key, env_m)
+            env_url = f"GROQ_AGENT_{i}_BASE_URL"
+            url_key = f"groq_agent_{i}_base_url"
+            url_val = getattr(self, url_key)
+            if url_val == "https://api.groq.com/openai/v1":
+                env_u = os.environ.get(env_url)
+                if env_u:
+                    setattr(self, url_key, env_u)
+
+    def get_agent_config(self, agent_number: int) -> dict[str, str]:
+        return {
+            "api_key": getattr(self, f"groq_agent_{agent_number}_api_key", self.ai_api_key),
+            "model": getattr(self, f"groq_agent_{agent_number}_model", self.ai_model),
+            "base_url": getattr(self, f"groq_agent_{agent_number}_base_url", self.ai_base_url),
+        }
 
     @property
     def allowed_domains_list(self) -> list[str]:
