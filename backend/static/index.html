@@ -3,209 +3,731 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Browser Automation API - Dashboard</title>
+    <title>Beta Virtual AI - Dashboard</title>
     <style>
+        :root {
+            --bg: #0f0f1a;
+            --bg2: #161625;
+            --bg3: #1e1e30;
+            --accent: #6c5ce7;
+            --accent2: #a29bfe;
+            --success: #00b894;
+            --warning: #fdcb6e;
+            --danger: #e17055;
+            --info: #74b9ff;
+            --text: #dfe6e9;
+            --text2: #b2bec3;
+            --border: #2d2d44;
+            --radius: 8px;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        header { background: #16213e; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
-        h1 { font-size: 1.5rem; }
-        .auth-section { background: #0f3460; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-        .auth-section h2 { margin-bottom: 15px; font-size: 1.2rem; }
-        input, select, button { padding: 10px; border: none; border-radius: 4px; margin-right: 10px; margin-bottom: 10px; }
-        input { background: #1a1a2e; color: #eee; width: 300px; }
-        button { background: #e94560; color: white; cursor: pointer; font-weight: bold; }
-        button:hover { background: #c73e54; }
-        button.secondary { background: #533483; }
-        button.secondary:hover { background: #7b2d8e; }
-        .status { padding: 10px; border-radius: 4px; margin-bottom: 10px; display: none; }
-        .status.success { display: block; background: #1b4332; color: #95d5b2; }
-        .status.error { display: block; background: #5c1a1a; color: #f5a3a3; }
-        .tasks-table { width: 100%; border-collapse: collapse; background: #16213e; border-radius: 8px; overflow: hidden; }
-        .tasks-table th, .tasks-table td { padding: 12px; text-align: left; border-bottom: 1px solid #1a1a2e; }
-        .tasks-table th { background: #0f3460; font-weight: 600; }
-        .tasks-table tr:hover { background: #1a1a2e; }
-        .state-badge { padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
-        .state-QUEUED { background: #533483; }
-        .state-RUNNING { background: #0f3460; color: #4cc9f0; }
-        .state-SUCCESS { background: #1b4332; color: #95d5b2; }
-        .state-FAILURE { background: #5c1a1a; color: #f5a3a3; }
-        .state-WAITING { background: #5c4813; color: #f5d7a3; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .card { background: #16213e; padding: 20px; border-radius: 8px; }
-        .card h3 { margin-bottom: 15px; color: #4cc9f0; }
-        .metric { font-size: 2rem; font-weight: bold; color: #e94560; }
-        #ws-status { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-left: 10px; }
-        #ws-status.connected { background: #95d5b2; }
-        #ws-status.disconnected { background: #f5a3a3; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+        .app { display: flex; min-height: 100vh; }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px; background: var(--bg2); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 10;
+        }
+        .sidebar-header { padding: 20px; border-bottom: 1px solid var(--border); }
+        .sidebar-header h1 { font-size: 1.1rem; color: var(--accent2); }
+        .sidebar-header small { color: var(--text2); font-size: 0.75rem; }
+        .nav { flex: 1; padding: 10px 0; }
+        .nav-item {
+            padding: 12px 20px; cursor: pointer; display: flex; align-items: center; gap: 10px;
+            color: var(--text2); transition: all 0.2s; border-left: 3px solid transparent;
+        }
+        .nav-item:hover { background: var(--bg3); color: var(--text); }
+        .nav-item.active { background: var(--bg3); color: var(--accent2); border-left-color: var(--accent); }
+        .nav-item svg { width: 18px; height: 18px; }
+        .sidebar-footer { padding: 15px 20px; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--text2); }
+        .ws-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .ws-dot.on { background: var(--success); box-shadow: 0 0 6px var(--success); }
+        .ws-dot.off { background: var(--danger); }
+
+        /* Main */
+        .main { flex: 1; margin-left: 240px; padding: 24px; }
+        .page { display: none; }
+        .page.active { display: block; }
+
+        /* Auth */
+        .auth-overlay {
+            position: fixed; inset: 0; background: var(--bg); z-index: 100;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .auth-overlay.hidden { display: none; }
+        .auth-box {
+            background: var(--bg2); padding: 40px; border-radius: 12px; border: 1px solid var(--border);
+            width: 400px; text-align: center;
+        }
+        .auth-box h2 { margin-bottom: 8px; color: var(--accent2); }
+        .auth-box p { color: var(--text2); margin-bottom: 24px; font-size: 0.9rem; }
+
+        /* Forms */
+        .form-group { margin-bottom: 16px; text-align: left; }
+        .form-group label { display: block; margin-bottom: 6px; font-size: 0.85rem; color: var(--text2); font-weight: 500; }
+        input, textarea, select {
+            width: 100%; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border);
+            border-radius: var(--radius); color: var(--text); font-size: 0.9rem; outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+        textarea { resize: vertical; min-height: 80px; font-family: inherit; }
+
+        .btn {
+            padding: 10px 20px; border: none; border-radius: var(--radius); cursor: pointer;
+            font-weight: 600; font-size: 0.9rem; transition: all 0.2s; display: inline-flex;
+            align-items: center; gap: 6px;
+        }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: #5a4bd1; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #00a381; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border); }
+        .btn-ghost:hover { background: var(--bg3); color: var(--text); }
+        .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+        /* Cards */
+        .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .card-header h3 { font-size: 1rem; }
+
+        /* Stats */
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+        .stat-card .label { font-size: 0.8rem; color: var(--text2); margin-bottom: 4px; }
+        .stat-card .value { font-size: 1.8rem; font-weight: 700; }
+        .stat-card .value.accent { color: var(--accent2); }
+        .stat-card .value.success { color: var(--success); }
+        .stat-card .value.warning { color: var(--warning); }
+        .stat-card .value.danger { color: var(--danger); }
+
+        /* Table */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background: var(--bg3); font-size: 0.8rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+        tr:hover td { background: var(--bg3); }
+
+        .badge {
+            padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;
+            display: inline-block;
+        }
+        .badge-QUEUED { background: #2d1b69; color: #a29bfe; }
+        .badge-STARTING { background: #1b3a4b; color: #74b9ff; }
+        .badge-RUNNING { background: #1b4332; color: #55efc4; }
+        .badge-SUCCESS { background: #1b4332; color: #00b894; }
+        .badge-FAILURE { background: #4a1a1a; color: #e17055; }
+        .badge-TIMEOUT { background: #4a3a1a; color: #fdcb6e; }
+        .badge-STOPPED { background: #3a3a3a; color: #b2bec3; }
+        .badge-WAITING_FOR_MANUAL_ACTION { background: #4a3a1a; color: #ffeaa7; }
+
+        /* Preview */
+        .preview-frame {
+            width: 100%; height: 500px; background: var(--bg); border: 1px solid var(--border);
+            border-radius: var(--radius); display: flex; align-items: center; justify-content: center;
+            color: var(--text2); overflow: hidden;
+        }
+        .preview-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+        /* AI Chat */
+        .chat-container { display: flex; flex-direction: column; height: calc(100vh - 180px); }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 16px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; }
+        .chat-msg { margin-bottom: 12px; max-width: 80%; }
+        .chat-msg.user { margin-left: auto; }
+        .chat-msg .bubble {
+            padding: 10px 14px; border-radius: 12px; font-size: 0.9rem; line-height: 1.5;
+            white-space: pre-wrap; word-break: break-word;
+        }
+        .chat-msg.user .bubble { background: var(--accent); color: white; border-bottom-right-radius: 4px; }
+        .chat-msg.assistant .bubble { background: var(--bg3); color: var(--text); border-bottom-left-radius: 4px; }
+        .chat-msg .meta { font-size: 0.7rem; color: var(--text2); margin-top: 4px; }
+        .chat-msg.user .meta { text-align: right; }
+        .chat-input { display: flex; gap: 8px; padding: 12px; background: var(--bg2); border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--radius) var(--radius); }
+        .chat-input input { flex: 1; }
+        .typing { display: none; padding: 8px 14px; color: var(--text2); font-size: 0.85rem; }
+        .typing.show { display: block; }
+
+        /* Scheduled */
+        .cron-help { font-size: 0.75rem; color: var(--text2); margin-top: 4px; }
+
+        /* Toast */
+        .toast {
+            position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: var(--radius);
+            font-size: 0.9rem; z-index: 200; animation: slideIn 0.3s ease;
+        }
+        .toast.success { background: var(--success); color: white; }
+        .toast.error { background: var(--danger); color: white; }
+        @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .modal-overlay.hidden { display: none; }
+        .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 500px; max-width: 90vw; max-height: 80vh; overflow-y: auto; }
+        .modal h3 { margin-bottom: 16px; }
+
+        @media (max-width: 768px) {
+            .sidebar { width: 60px; }
+            .sidebar-header h1, .sidebar-header small, .nav-item span, .sidebar-footer span { display: none; }
+            .nav-item { justify-content: center; padding: 12px; }
+            .main { margin-left: 60px; }
+            .stats { grid-template-columns: 1fr 1fr; }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Browser Automation API <span id="ws-status" class="disconnected"></span></h1>
-            <div>
-                <button onclick="refreshTasks()">Refresh</button>
-                <button class="secondary" onclick="logout()">Logout</button>
-            </div>
-        </header>
 
-        <div class="auth-section">
-            <h2>Authentication</h2>
-            <input type="password" id="api-token" placeholder="API Token">
-            <button onclick="authenticate()">Connect</button>
-            <div id="auth-status" class="status"></div>
+<!-- Auth Overlay -->
+<div class="auth-overlay" id="auth-overlay">
+    <div class="auth-box">
+        <h2>Beta Virtual AI</h2>
+        <p>Multi-agent browser automation platform</p>
+        <div class="form-group">
+            <label>API Token</label>
+            <input type="password" id="auth-token" placeholder="Enter your API token" onkeydown="if(event.key==='Enter')login()">
         </div>
-
-        <div class="grid">
-            <div class="card">
-                <h3>Create Task</h3>
-                <input type="text" id="target-url" placeholder="Target URL"><br>
-                <input type="text" id="username" placeholder="Username"><br>
-                <input type="password" id="password" placeholder="Password"><br>
-                <input type="text" id="instruction" placeholder="Instruction (optional)"><br>
-                <button onclick="createTask()">Create Task</button>
-                <div id="create-status" class="status"></div>
-            </div>
-
-            <div class="card">
-                <h3>Quick Stats</h3>
-                <div class="metric" id="total-tasks">0</div>
-                <p>Total Tasks</p>
-                <div class="metric" id="running-tasks" style="color: #4cc9f0;">0</div>
-                <p>Running</p>
-            </div>
-        </div>
-
-        <h2 style="margin: 20px 0 10px;">Tasks</h2>
-        <table class="tasks-table">
-            <thead>
-                <tr>
-                    <th>Task ID</th>
-                    <th>State</th>
-                    <th>Target URL</th>
-                    <th>Created</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="tasks-body">
-                <tr><td colspan="5">No tasks yet</td></tr>
-            </tbody>
-        </table>
+        <button class="btn btn-primary" style="width:100%" onclick="login()">Connect</button>
+        <div id="auth-error" style="color:var(--danger);margin-top:12px;font-size:0.85rem"></div>
     </div>
+</div>
 
-    <script>
-        let apiToken = '';
-        let ws = null;
+<!-- App -->
+<div class="app">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h1>Beta Virtual AI</h1>
+            <small>v2.0.0</small>
+        </div>
+        <div class="nav">
+            <div class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                <span>Dashboard</span>
+            </div>
+            <div class="nav-item" data-page="tasks" onclick="showPage('tasks')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                <span>Tasks</span>
+            </div>
+            <div class="nav-item" data-page="scheduled" onclick="showPage('scheduled')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>Scheduled</span>
+            </div>
+            <div class="nav-item" data-page="preview" onclick="showPage('preview')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Preview</span>
+            </div>
+            <div class="nav-item" data-page="ai" onclick="showPage('ai')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                <span>AI Chat</span>
+            </div>
+            <div class="nav-item" data-page="clients" onclick="showPage('clients')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <span>Clients</span>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <span class="ws-dot off" id="ws-indicator"></span>
+            <span id="ws-label">Disconnected</span>
+        </div>
+    </nav>
 
-        function authenticate() {
-            apiToken = document.getElementById('api-token').value;
-            if (!apiToken) {
-                showStatus('auth-status', 'Please enter a token', 'error');
-                return;
+    <!-- Main Content -->
+    <div class="main">
+
+        <!-- Dashboard Page -->
+        <div class="page active" id="page-dashboard">
+            <h2 style="margin-bottom:20px">Dashboard</h2>
+            <div class="stats">
+                <div class="stat-card"><div class="label">Total Tasks</div><div class="value accent" id="stat-total">0</div></div>
+                <div class="stat-card"><div class="label">Running</div><div class="value success" id="stat-running">0</div></div>
+                <div class="stat-card"><div class="label">Success</div><div class="value" style="color:var(--success)" id="stat-success">0</div></div>
+                <div class="stat-card"><div class="label">Failed</div><div class="value danger" id="stat-failed">0</div></div>
+                <div class="stat-card"><div class="label">Waiting</div><div class="value warning" id="stat-waiting">0</div></div>
+                <div class="stat-card"><div class="label">Clients Online</div><div class="value" style="color:var(--info)" id="stat-clients">0</div></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>Recent Tasks</h3>
+                    <button class="btn btn-ghost btn-sm" onclick="refreshAll()">Refresh</button>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>ID</th><th>State</th><th>Target</th><th>Created</th><th>Actions</th></tr></thead>
+                        <tbody id="dash-tasks"><tr><td colspan="5" style="color:var(--text2)">No tasks yet</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tasks Page -->
+        <div class="page" id="page-tasks">
+            <h2 style="margin-bottom:20px">Tasks</h2>
+
+            <div class="card">
+                <div class="card-header"><h3>Create New Task</h3></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="form-group"><label>Target URL</label><input type="url" id="task-url" placeholder="https://example.com/login"></div>
+                    <div class="form-group"><label>Username</label><input type="text" id="task-user" placeholder="user@example.com"></div>
+                    <div class="form-group"><label>Password</label><input type="password" id="task-pass" placeholder="password"></div>
+                    <div class="form-group"><label>Instruction</label><input type="text" id="task-instr" placeholder="Log in with credentials"></div>
+                </div>
+                <button class="btn btn-primary" onclick="createTask()">Create Task</button>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>All Tasks</h3>
+                    <div>
+                        <select id="filter-state" onchange="filterTasks()" style="width:auto;padding:6px 10px;font-size:0.85rem">
+                            <option value="">All States</option>
+                            <option value="QUEUED">Queued</option>
+                            <option value="RUNNING">Running</option>
+                            <option value="SUCCESS">Success</option>
+                            <option value="FAILURE">Failed</option>
+                            <option value="WAITING_FOR_MANUAL_ACTION">Waiting</option>
+                        </select>
+                        <button class="btn btn-ghost btn-sm" onclick="refreshAll()">Refresh</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>ID</th><th>State</th><th>Target</th><th>Created</th><th>Actions</th></tr></thead>
+                        <tbody id="all-tasks"><tr><td colspan="5" style="color:var(--text2)">Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scheduled Page -->
+        <div class="page" id="page-scheduled">
+            <h2 style="margin-bottom:20px">Scheduled Tasks</h2>
+
+            <div class="card">
+                <div class="card-header"><h3>Create Scheduled Task</h3></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="form-group"><label>Name</label><input type="text" id="sched-name" placeholder="Daily login test"></div>
+                    <div class="form-group"><label>Cron Expression</label><input type="text" id="sched-cron" placeholder="0 9 * * *"><div class="cron-help">e.g. 0 9 * * * = every day at 9:00</div></div>
+                    <div class="form-group"><label>Target URL</label><input type="url" id="sched-url" placeholder="https://example.com/login"></div>
+                    <div class="form-group"><label>Username</label><input type="text" id="sched-user" placeholder="user@example.com"></div>
+                    <div class="form-group"><label>Password</label><input type="password" id="sched-pass" placeholder="password"></div>
+                    <div class="form-group"><label>Instruction</label><input type="text" id="sched-instr" placeholder="Log in with credentials"></div>
+                </div>
+                <button class="btn btn-primary" onclick="createScheduled()">Create Scheduled Task</button>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h3>Scheduled Tasks</h3></div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Name</th><th>URL</th><th>Cron</th><th>Enabled</th><th>Actions</th></tr></thead>
+                        <tbody id="sched-tasks"><tr><td colspan="5" style="color:var(--text2)">Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview Page -->
+        <div class="page" id="page-preview">
+            <h2 style="margin-bottom:20px">Browser Preview</h2>
+            <div class="card">
+                <div class="card-header">
+                    <h3>Live View</h3>
+                    <div>
+                        <select id="preview-task" onchange="loadPreview()" style="width:auto;padding:6px 10px;font-size:0.85rem">
+                            <option value="">Select a running task...</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="preview-frame" id="preview-area">
+                    <span>Select a task to view its browser</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Chat Page -->
+        <div class="page" id="page-ai">
+            <h2 style="margin-bottom:20px">AI Chat</h2>
+            <div class="card" style="padding:0;overflow:hidden">
+                <div class="chat-container">
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="chat-msg assistant"><div class="bubble">Hello! I'm the Beta Virtual AI multi-agent system. I use 5 specialized AI agents to process your requests. Ask me anything.</div><div class="meta">AI Agent</div></div>
+                    </div>
+                    <div class="typing" id="chat-typing">Agents are thinking...</div>
+                    <div class="chat-input">
+                        <input type="text" id="chat-input" placeholder="Type your message..." onkeydown="if(event.key==='Enter'&&!event.shiftKey)sendChat()">
+                        <button class="btn btn-primary" onclick="sendChat()">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Clients Page -->
+        <div class="page" id="page-clients">
+            <h2 style="margin-bottom:20px">Browser Clients</h2>
+            <div class="card">
+                <div class="card-header">
+                    <h3>Connected Clients</h3>
+                    <button class="btn btn-ghost btn-sm" onclick="refreshClients()">Refresh</button>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Client ID</th><th>Status</th><th>Browser</th><th>Current Task</th><th>Last Seen</th></tr></thead>
+                        <tbody id="clients-list"><tr><td colspan="5" style="color:var(--text2)">Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Task Detail Modal -->
+<div class="modal-overlay hidden" id="task-modal" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3>Task Details</h3>
+            <button class="btn btn-ghost btn-sm" onclick="closeModal()">X</button>
+        </div>
+        <div id="task-modal-content"></div>
+    </div>
+</div>
+
+<script>
+const API = '';
+let TOKEN = localStorage.getItem('beta_token') || '';
+let tasks = [];
+let allTasks = [];
+let ws = null;
+let reconnectTimer = null;
+
+// ==================== AUTH ====================
+function login() {
+    TOKEN = document.getElementById('auth-token').value.trim();
+    if (!TOKEN) { document.getElementById('auth-error').textContent = 'Enter a token'; return; }
+    localStorage.setItem('beta_token', TOKEN);
+    document.getElementById('auth-overlay').classList.add('hidden');
+    initApp();
+}
+
+function logout() {
+    TOKEN = '';
+    localStorage.removeItem('beta_token');
+    if (ws) ws.close();
+    document.getElementById('auth-overlay').classList.remove('hidden');
+}
+
+function headers() { return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` }; }
+
+function checkAuth() {
+    if (TOKEN) document.getElementById('auth-overlay').classList.add('hidden');
+}
+
+// ==================== NAVIGATION ====================
+function showPage(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById(`page-${page}`).classList.add('active');
+    document.querySelector(`[data-page="${page}"]`).classList.add('active');
+    if (page === 'scheduled') refreshScheduled();
+    if (page === 'clients') refreshClients();
+}
+
+// ==================== API CALLS ====================
+async function api(method, path, body) {
+    const opts = { method, headers: headers() };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(`${API}${path}`, opts);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Request failed');
+    return data;
+}
+
+async function refreshAll() {
+    try {
+        allTasks = await api('GET', '/api/v1/tasks?limit=100');
+        renderDashTasks();
+        renderAllTasks();
+        updateStats();
+        updatePreviewSelect();
+    } catch(e) { console.error(e); }
+}
+
+// ==================== TASKS ====================
+function renderDashTasks() {
+    const recent = allTasks.slice(0, 10);
+    const tbody = document.getElementById('dash-tasks');
+    if (!recent.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text2)">No tasks yet</td></tr>'; return; }
+    tbody.innerHTML = recent.map(t => taskRow(t)).join('');
+}
+
+function renderAllTasks() {
+    const filter = document.getElementById('filter-state').value;
+    const filtered = filter ? allTasks.filter(t => t.state === filter) : allTasks;
+    const tbody = document.getElementById('all-tasks');
+    if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text2)">No tasks found</td></tr>'; return; }
+    tbody.innerHTML = filtered.map(t => taskRow(t, true)).join('');
+}
+
+function filterTasks() { renderAllTasks(); }
+
+function taskRow(t, full) {
+    const id = t.task_id.substring(0, 8);
+    const time = new Date(t.created_at).toLocaleString();
+    const actions = full
+        ? `<button class="btn btn-ghost btn-sm" onclick="viewTask('${t.task_id}')">View</button>
+           ${t.state === 'RUNNING' || t.state === 'QUEUED' ? `<button class="btn btn-danger btn-sm" onclick="stopTask('${t.task_id}')">Stop</button>` : ''}`
+        : `<button class="btn btn-ghost btn-sm" onclick="viewTask('${t.task_id}')">View</button>`;
+    return `<tr>
+        <td><code style="font-size:0.8rem">${id}...</code></td>
+        <td><span class="badge badge-${t.state}">${t.state}</span></td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${t.target_url}</td>
+        <td style="font-size:0.85rem;color:var(--text2)">${time}</td>
+        <td>${actions}</td>
+    </tr>`;
+}
+
+function updateStats() {
+    document.getElementById('stat-total').textContent = allTasks.length;
+    document.getElementById('stat-running').textContent = allTasks.filter(t => t.state === 'RUNNING' || t.state === 'STARTING').length;
+    document.getElementById('stat-success').textContent = allTasks.filter(t => t.state === 'SUCCESS').length;
+    document.getElementById('stat-failed').textContent = allTasks.filter(t => t.state === 'FAILURE' || t.state === 'TIMEOUT').length;
+    document.getElementById('stat-waiting').textContent = allTasks.filter(t => t.state === 'WAITING_FOR_MANUAL_ACTION').length;
+}
+
+async function createTask() {
+    const url = document.getElementById('task-url').value.trim();
+    const user = document.getElementById('task-user').value.trim();
+    const pass = document.getElementById('task-pass').value;
+    const instr = document.getElementById('task-instr').value.trim() || 'Log in with the provided credentials';
+    if (!url || !user || !pass) { toast('Fill in all required fields', 'error'); return; }
+    try {
+        const task = await api('POST', '/api/v1/task', {
+            target_url: url, username: user, password: pass, natural_language_instruction: instr
+        });
+        toast(`Task created: ${task.task_id.substring(0, 8)}...`, 'success');
+        document.getElementById('task-url').value = '';
+        document.getElementById('task-user').value = '';
+        document.getElementById('task-pass').value = '';
+        document.getElementById('task-instr').value = '';
+        refreshAll();
+    } catch(e) { toast(e.message, 'error'); }
+}
+
+async function stopTask(id) {
+    try { await api('POST', `/api/v1/task/${id}/stop`); toast('Task stopped', 'success'); refreshAll(); }
+    catch(e) { toast(e.message, 'error'); }
+}
+
+async function viewTask(id) {
+    try {
+        const task = await api('GET', `/api/v1/task/${id}`);
+        const events = await api('GET', `/api/v1/task/${id}/events`);
+        const evHtml = events.map(e => `<div style="margin-bottom:6px;font-size:0.85rem"><span style="color:var(--text2)">${e.timestamp}</span> <span class="badge badge-${e.data || ''}" style="font-size:0.7rem">${e.event}</span> ${e.data || ''}</div>`).join('');
+        document.getElementById('task-modal-content').innerHTML = `
+            <div class="form-group"><label>Task ID</label><div><code>${task.task_id}</code></div></div>
+            <div class="form-group"><label>State</label><div><span class="badge badge-${task.state}">${task.state}</span></div></div>
+            <div class="form-group"><label>Target URL</label><div>${task.target_url}</div></div>
+            <div class="form-group"><label>Created</label><div>${new Date(task.created_at).toLocaleString()}</div></div>
+            ${task.result ? `<div class="form-group"><label>Result</label><div>${task.result}</div></div>` : ''}
+            ${task.reason ? `<div class="form-group"><label>Reason</label><div>${task.reason}</div></div>` : ''}
+            <div class="form-group"><label>Events (${events.length})</label><div style="max-height:200px;overflow-y:auto;background:var(--bg);padding:10px;border-radius:var(--radius)">${evHtml || 'No events'}</div></div>
+            ${task.state === 'RUNNING' || task.state === 'QUEUED' ? `<button class="btn btn-danger" onclick="stopTask('${task.task_id}');closeModal()">Stop Task</button>` : ''}
+        `;
+        document.getElementById('task-modal').classList.remove('hidden');
+    } catch(e) { toast(e.message, 'error'); }
+}
+
+function closeModal() { document.getElementById('task-modal').classList.add('hidden'); }
+
+// ==================== SCHEDULED ====================
+async function refreshScheduled() {
+    try {
+        const tasks = await api('GET', '/api/v1/scheduled-tasks');
+        const tbody = document.getElementById('sched-tasks');
+        if (!tasks.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text2)">No scheduled tasks</td></tr>'; return; }
+        tbody.innerHTML = tasks.map(t => `<tr>
+            <td>${t.name}</td>
+            <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis">${t.target_url}</td>
+            <td><code>${t.cron_expression}</code></td>
+            <td>${t.enabled ? '<span class="badge badge-SUCCESS">Enabled</span>' : '<span class="badge badge-STOPPED">Disabled</span>'}</td>
+            <td>
+                <button class="btn btn-ghost btn-sm" onclick="toggleScheduled('${t.id}',${!t.enabled})">${t.enabled ? 'Disable' : 'Enable'}</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteScheduled('${t.id}')">Delete</button>
+            </td>
+        </tr>`).join('');
+    } catch(e) { console.error(e); }
+}
+
+async function createScheduled() {
+    const name = document.getElementById('sched-name').value.trim();
+    const cron = document.getElementById('sched-cron').value.trim();
+    const url = document.getElementById('sched-url').value.trim();
+    const user = document.getElementById('sched-user').value.trim();
+    const pass = document.getElementById('sched-pass').value;
+    if (!name || !cron || !url || !user || !pass) { toast('Fill in all fields', 'error'); return; }
+    try {
+        await api('POST', '/api/v1/scheduled-task', {
+            name, cron_expression: cron, target_url: url,
+            username: user, password: pass,
+            instruction: document.getElementById('sched-instr').value.trim() || 'Log in with the provided credentials'
+        });
+        toast('Scheduled task created', 'success');
+        document.getElementById('sched-name').value = '';
+        document.getElementById('sched-cron').value = '';
+        document.getElementById('sched-url').value = '';
+        document.getElementById('sched-user').value = '';
+        document.getElementById('sched-pass').value = '';
+        refreshScheduled();
+    } catch(e) { toast(e.message, 'error'); }
+}
+
+async function toggleScheduled(id, enable) {
+    try {
+        await api('POST', `/api/v1/scheduled-task/${id}/${enable ? 'enable' : 'disable'}`);
+        toast(`Task ${enable ? 'enabled' : 'disabled'}`, 'success');
+        refreshScheduled();
+    } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteScheduled(id) {
+    if (!confirm('Delete this scheduled task?')) return;
+    try {
+        await api('DELETE', `/api/v1/scheduled-task/${id}`);
+        toast('Deleted', 'success');
+        refreshScheduled();
+    } catch(e) { toast(e.message, 'error'); }
+}
+
+// ==================== PREVIEW ====================
+function updatePreviewSelect() {
+    const sel = document.getElementById('preview-task');
+    const running = allTasks.filter(t => t.state === 'RUNNING' || t.state === 'WAITING_FOR_MANUAL_ACTION');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Select a running task...</option>' +
+        running.map(t => `<option value="${t.task_id}">${t.task_id.substring(0, 8)}... - ${t.state}</option>`).join('');
+    if (current) sel.value = current;
+}
+
+function loadPreview() {
+    const taskId = document.getElementById('preview-task').value;
+    const area = document.getElementById('preview-area');
+    if (!taskId) { area.innerHTML = '<span>Select a task to view its browser</span>'; return; }
+    area.innerHTML = `<img src="${API}/api/v1/task/${taskId}/preview?token=" onerror="this.parentElement.innerHTML='<span>Preview not available</span>'">`;
+}
+
+// ==================== AI CHAT ====================
+async function sendChat() {
+    const input = document.getElementById('chat-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+
+    addChatMsg('user', msg);
+    document.getElementById('chat-typing').classList.add('show');
+
+    try {
+        const res = await fetch(`${API}/v1/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
+            body: JSON.stringify({
+                model: 'beta-virtual-ai',
+                messages: [{ role: 'user', content: msg }],
+                temperature: 0.7,
+                max_tokens: 4096
+            })
+        });
+        const data = await res.json();
+        document.getElementById('chat-typing').classList.remove('show');
+        if (res.ok && data.choices && data.choices[0]) {
+            addChatMsg('assistant', data.choices[0].message.content,
+                `Tokens: ${data.usage?.total_tokens || '?'} | Model: ${data.model}`);
+        } else {
+            addChatMsg('assistant', `Error: ${data.detail || 'Unknown error'}`);
+        }
+    } catch(e) {
+        document.getElementById('chat-typing').classList.remove('show');
+        addChatMsg('assistant', `Network error: ${e.message}`);
+    }
+}
+
+function addChatMsg(role, text, meta) {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = `chat-msg ${role}`;
+    div.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>${meta ? `<div class="meta">${meta}</div>` : ''}`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+// ==================== CLIENTS ====================
+async function refreshClients() {
+    try {
+        const clients = await api('GET', '/api/clients/status');
+        document.getElementById('stat-clients').textContent = clients.length;
+        const tbody = document.getElementById('clients-list');
+        if (!clients.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text2)">No clients connected</td></tr>'; return; }
+        tbody.innerHTML = clients.map(c => `<tr>
+            <td><code>${c.client_id}</code></td>
+            <td><span class="badge badge-${c.status === 'online' ? 'SUCCESS' : 'STOPPED'}">${c.status}</span></td>
+            <td>${c.browser_status}</td>
+            <td>${c.current_task || '-'}</td>
+            <td style="font-size:0.85rem;color:var(--text2)">${c.last_seen ? new Date(c.last_seen).toLocaleString() : '-'}</td>
+        </tr>`).join('');
+    } catch(e) { console.error(e); }
+}
+
+// ==================== WEBSOCKET ====================
+function connectWS() {
+    if (ws && ws.readyState <= 1) return;
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/api/v1/ws/tasks`);
+    ws.onopen = () => {
+        document.getElementById('ws-indicator').className = 'ws-dot on';
+        document.getElementById('ws-label').textContent = 'Connected';
+    };
+    ws.onmessage = (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            if (data.event === 'tasks_update' && data.data) {
+                allTasks = data.data;
+                renderDashTasks();
+                updateStats();
+                updatePreviewSelect();
             }
-            showStatus('auth-status', 'Connected!', 'success');
-            connectWebSocket();
-            refreshTasks();
-        }
+        } catch(err) {}
+    };
+    ws.onclose = () => {
+        document.getElementById('ws-indicator').className = 'ws-dot off';
+        document.getElementById('ws-label').textContent = 'Disconnected';
+        reconnectTimer = setTimeout(connectWS, 3000);
+    };
+}
 
-        function logout() {
-            apiToken = '';
-            if (ws) ws.close();
-            document.getElementById('ws-status').className = 'disconnected';
-            showStatus('auth-status', 'Logged out', 'error');
-        }
+// ==================== UTILS ====================
+function toast(msg, type = 'success') {
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+}
 
-        function connectWebSocket() {
-            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${protocol}//${location.host}/api/v1/ws/tasks`);
-            ws.onopen = () => {
-                document.getElementById('ws-status').className = 'connected';
-            };
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.event === 'tasks_update') {
-                    updateTasksUI(data.data);
-                }
-            };
-            ws.onclose = () => {
-                document.getElementById('ws-status').className = 'disconnected';
-                setTimeout(connectWebSocket, 3000);
-            };
-        }
+// ==================== INIT ====================
+function initApp() {
+    refreshAll();
+    connectWS();
+    setInterval(refreshAll, 15000);
+}
 
-        async function createTask() {
-            const body = {
-                target_url: document.getElementById('target-url').value,
-                username: document.getElementById('username').value,
-                password: document.getElementById('password').value,
-                natural_language_instruction: document.getElementById('instruction').value || 'Log in with the provided credentials'
-            };
-            try {
-                const res = await fetch('/api/v1/task', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiToken}`
-                    },
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    showStatus('create-status', `Task created: ${data.task_id}`, 'success');
-                    refreshTasks();
-                } else {
-                    showStatus('create-status', data.detail || 'Error', 'error');
-                }
-            } catch (e) {
-                showStatus('create-status', 'Network error', 'error');
-            }
-        }
-
-        async function refreshTasks() {
-            try {
-                const res = await fetch('/api/v1/tasks', {
-                    headers: { 'Authorization': `Bearer ${apiToken}` }
-                });
-                const tasks = await res.json();
-                updateTasksUI(tasks);
-            } catch (e) {}
-        }
-
-        function updateTasksUI(tasks) {
-            const tbody = document.getElementById('tasks-body');
-            if (!tasks.length) {
-                tbody.innerHTML = '<tr><td colspan="5">No tasks yet</td></tr>';
-                return;
-            }
-            document.getElementById('total-tasks').textContent = tasks.length;
-            document.getElementById('running-tasks').textContent = tasks.filter(t => t.state === 'RUNNING').length;
-            tbody.innerHTML = tasks.map(t => `
-                <tr>
-                    <td>${t.task_id.substring(0, 8)}...</td>
-                    <td><span class="state-badge state-${t.state}">${t.state}</span></td>
-                    <td>${t.target_url}</td>
-                    <td>${new Date(t.created_at).toLocaleString()}</td>
-                    <td>
-                        <button class="secondary" onclick="stopTask('${t.task_id}')">Stop</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        async function stopTask(taskId) {
-            await fetch(`/api/v1/task/${taskId}/stop`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${apiToken}` }
-            });
-            refreshTasks();
-        }
-
-        function showStatus(elementId, message, type) {
-            const el = document.getElementById(elementId);
-            el.textContent = message;
-            el.className = `status ${type}`;
-        }
-    </script>
+checkAuth();
+</script>
 </body>
 </html>
