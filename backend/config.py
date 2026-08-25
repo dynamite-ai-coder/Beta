@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     # Browser (Windows client only)
     browser_executable: str | None = None
     headless: bool = True
+    browser_engine: str = "selenium"  # selenium | browser-use
 
     # Proxy (Proxy-Cheap)
     proxy_enabled: bool = False

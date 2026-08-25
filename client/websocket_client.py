@@ -119,9 +119,9 @@ class WebSocketClient:
         try:
             await self._send(msg_task_started(task_id))
 
-            from client.browser import BrowserWorkerManager
+            from client.browser import create_browser_manager
             if not self._browser_manager:
-                self._browser_manager = BrowserWorkerManager(max_workers=1)
+                self._browser_manager = create_browser_manager(max_workers=1)
             manager = self._browser_manager
             worker = await manager.get_or_create_worker()
 

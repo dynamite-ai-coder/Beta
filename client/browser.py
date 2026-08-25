@@ -3,11 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
+
+BROWSER_ENGINE = os.environ.get("BROWSER_ENGINE", "selenium")
 
 JS_COLLECT_DOM = """
 var MAX = arguments[0] || 80;
@@ -260,3 +263,8 @@ class BrowserWorkerManager:
             if w.is_ready:
                 return w
         return None
+
+
+def create_browser_manager(max_workers: int = 1) -> BrowserWorkerManager:
+    """Factory for browser manager based on BROWSER_ENGINE env var."""
+    return BrowserWorkerManager(max_workers=max_workers)
