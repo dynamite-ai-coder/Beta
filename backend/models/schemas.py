@@ -43,6 +43,8 @@ class TaskResponse(BaseModel):
     updated_at: datetime
     message: str | None = None
     preview_url: str | None = None
+    result: str | None = None
+    reason: str | None = None
 
 
 class TaskResult(BaseModel):
