@@ -124,12 +124,17 @@ class BrowserWorker:
             return False
         try:
             await asyncio.to_thread(self._driver.get, url)
-            await asyncio.to_thread(
-                lambda: self._driver.execute_script(
-                    "return document.readyState"
-                ) == "complete"
-                or time.sleep(2)
-            )
+
+            def _wait_ready():
+                try:
+                    return self._driver.execute_script("return document.readyState") == "complete"
+                except Exception:
+                    return False
+
+            for _ in range(15):
+                if await asyncio.to_thread(_wait_ready):
+                    break
+                await asyncio.sleep(0.5)
             return True
         except Exception as e:
             logger.error(f"Navigation failed: {e}")

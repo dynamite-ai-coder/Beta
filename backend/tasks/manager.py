@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from backend.config import settings
 from backend.models.schemas import TaskState
+from backend.tasks.repository import TaskRepository
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,15 @@ class TaskManager:
         self._events: dict[str, list[dict]] = {}
         self._pending_results: dict[str, asyncio.Future] = {}
         self._lock = asyncio.Lock()
+
+    async def _get_repo(self) -> TaskRepository | None:
+        try:
+            from backend.database import async_session
+            session = async_session()
+            return TaskRepository(session)
+        except Exception as e:
+            logger.error("Failed to create DB session: %s", e)
+            return None
 
     async def create_task(
         self,
@@ -46,9 +56,30 @@ class TaskManager:
         async with self._lock:
             self._tasks[task_id] = task
             self._events[task_id] = []
+
+        repo = await self._get_repo()
+        if repo:
+            try:
+                await repo.create_task(
+                    task_id=task_id,
+                    target_url=target_url,
+                    username=username,
+                    password=password,
+                    instruction=instruction,
+                )
+                await repo.add_event(task_id, "created")
+            except Exception as e:
+                logger.error("Failed to persist task to DB: %s", e)
+
         return task
 
     def get_task(self, task_id: str) -> dict | None:
+        task = self._tasks.get(task_id)
+        if task:
+            return {k: v for k, v in task.items() if k != "password"}
+        return None
+
+    def _get_task_internal(self, task_id: str) -> dict | None:
         return self._tasks.get(task_id)
 
     def get_events(self, task_id: str) -> list[dict]:
@@ -68,6 +99,16 @@ class TaskManager:
                     self._tasks[task_id]["reason"] = reason
                 self._add_event(task_id, "state_change", state.value)
 
+        repo = await self._get_repo()
+        if repo:
+            try:
+                await repo.update_task_state(
+                    task_id, state.value, reason=reason
+                )
+                await repo.add_event(task_id, "state_change", state.value)
+            except Exception as e:
+                logger.error("Failed to persist state change to DB: %s", e)
+
     def _add_event(self, task_id: str, event: str, data: str | None = None) -> None:
         if task_id in self._events:
             self._events[task_id].append({
@@ -77,7 +118,7 @@ class TaskManager:
             })
 
     async def execute_task(self, task_id: str) -> None:
-        task = self._tasks.get(task_id)
+        task = self._get_task_internal(task_id)
         if not task:
             return
 
@@ -175,7 +216,7 @@ class TaskManager:
             future.set_result({"status": status, **result})
 
     async def stop_task(self, task_id: str) -> bool:
-        task = self._tasks.get(task_id)
+        task = self._get_task_internal(task_id)
         if task and task.get("assigned_client"):
             from backend.services.client_manager import client_manager
             from backend.services.ws_protocol import msg_task_cancel
@@ -188,7 +229,7 @@ class TaskManager:
         return False
 
     async def manual_action_continue(self, task_id: str) -> bool:
-        task = self._tasks.get(task_id)
+        task = self._get_task_internal(task_id)
         if task and task["state"] == TaskState.WAITING_FOR_MANUAL_ACTION:
             await self.update_task_state(
                 task_id, TaskState.RUNNING, "Resumed after manual action"
@@ -202,7 +243,7 @@ class TaskManager:
             self._pending_results.clear()
 
     def save_result(self, task_id: str) -> None:
-        task = self._tasks.get(task_id)
+        task = self._get_task_internal(task_id)
         if not task:
             return
 

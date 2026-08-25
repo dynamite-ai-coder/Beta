@@ -38,6 +38,7 @@ class WebSocketClient:
         self._connected = False
         self._running = False
         self._reconnect_delay = config.reconnect_delay_start
+        self._browser_manager = None
 
     @property
     def is_connected(self) -> bool:
@@ -119,7 +120,9 @@ class WebSocketClient:
             await self._send(msg_task_started(task_id))
 
             from client.browser import BrowserWorkerManager
-            manager = BrowserWorkerManager(max_workers=1)
+            if not self._browser_manager:
+                self._browser_manager = BrowserWorkerManager(max_workers=1)
+            manager = self._browser_manager
             worker = await manager.get_or_create_worker()
 
             if not worker.is_ready:
@@ -174,8 +177,6 @@ class WebSocketClient:
             else:
                 await self._send(msg_task_result(task_id, "success", result))
 
-            await manager.stop_all()
-
         except Exception as e:
             logger.error(f"Task execution error: {e}")
             await self._send(msg_task_error(task_id, str(e)))
@@ -198,5 +199,8 @@ class WebSocketClient:
 
     async def disconnect(self) -> None:
         self._running = False
+        if self._browser_manager:
+            await self._browser_manager.stop_all()
+            self._browser_manager = None
         if self._ws:
             await self._ws.close()

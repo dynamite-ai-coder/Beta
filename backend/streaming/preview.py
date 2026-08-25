@@ -3,11 +3,23 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from selenium.common.exceptions import WebDriverException
-
-from backend.browser.driver import take_screenshot
-
 logger = logging.getLogger(__name__)
+
+
+def _try_import_selenium():
+    try:
+        from selenium.common.exceptions import WebDriverException
+        return WebDriverException
+    except ImportError:
+        return None
+
+
+def _try_import_take_screenshot():
+    try:
+        from backend.browser.driver import take_screenshot
+        return take_screenshot
+    except ImportError:
+        return None
 
 
 class PreviewStreamer:
@@ -49,12 +61,20 @@ class PreviewStreamer:
         if not stream_info:
             return
 
+        take_screenshot_fn = _try_import_take_screenshot()
+        if not take_screenshot_fn:
+            logger.warning("Selenium not available, frame capture disabled")
+            return
+
+        WebDriverException = _try_import_selenium()
+        exc_types = (WebDriverException, OSError, RuntimeError) if WebDriverException else (OSError, RuntimeError)
+
         driver = None
         try:
             if driver_factory:
                 driver = driver_factory()
             while stream_info["active"] and driver:
-                frame = take_screenshot(driver)
+                frame = take_screenshot_fn(driver)
                 if frame:
                     try:
                         stream_info["frames"].put_nowait(frame)
@@ -65,13 +85,13 @@ class PreviewStreamer:
                             pass
                         stream_info["frames"].put_nowait(frame)
                 await asyncio.sleep(0.5)
-        except (WebDriverException, OSError, RuntimeError) as e:
+        except exc_types as e:
             logger.error("Frame capture error: %s", e)
         finally:
             if driver:
                 try:
                     driver.quit()
-                except (WebDriverException, OSError) as e:
+                except Exception as e:
                     logger.debug("Preview driver close error (ignored): %s", e)
 
     def get_preview_url(self, task_id: str, base_url: str = "") -> str:

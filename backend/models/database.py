@@ -55,7 +55,6 @@ class TaskRow(Base):
             "state": self.state,
             "target_url": self.target_url,
             "username": self.username,
-            "password": self.password,
             "instruction": self.instruction,
             "result": self.result,
             "reason": self.reason,
