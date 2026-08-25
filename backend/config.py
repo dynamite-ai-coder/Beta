@@ -36,11 +36,11 @@ class Settings(BaseSettings):
     browser_executable: str | None = None
     headless: bool = True
 
-    # Proxy (Moke API Residential)
+    # Proxy (Proxy-Cheap)
     proxy_enabled: bool = True
     proxy_secret: str = ""
     proxy_apikey: str = ""
-    proxy_url: str = ""
+    proxy_url: str = "http://01a03626-786e-79a1-9d39-8d77a7fcf978:01a03626-786e-79a1-9d39-8d77a8bb0953@proxy-us.proxy-cheap.com:5959"
 
     # Preview
     preview_enabled: bool = True
@@ -69,17 +69,17 @@ class Settings(BaseSettings):
         self.proxy_url = self.proxy_url.strip()
         if not self.proxy_secret:
             self.proxy_secret = os.environ.get(
-                "MOKE_SECRET", ""
+                "PROXY_SECRET", os.environ.get("MOKE_SECRET", "")
             )
         if not self.proxy_apikey:
             self.proxy_apikey = os.environ.get(
-                "MOKE_APIKEY", ""
+                "PROXY_APIKEY", os.environ.get("MOKE_APIKEY", "")
             )
         if self.proxy_secret and self.proxy_apikey and not self.proxy_url:
             self.proxy_url = (
-                f"http://user-{self.proxy_apikey}"
+                f"http://{self.proxy_apikey}"
                 f":{self.proxy_secret}"
-                f"@all.proxymesh.com:31280"
+                f"@proxy-us.proxy-cheap.com:5959"
             )
         if not self.ai_api_key:
             self.ai_api_key = os.environ.get(

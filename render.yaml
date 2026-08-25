@@ -34,3 +34,11 @@ services:
         value: "30"
       - key: DEBUG
         value: "false"
+      - key: PROXY_ENABLED
+        value: "true"
+      - key: PROXY_APIKEY
+        value: "01a03626-786e-79a1-9d39-8d77a7fcf978"
+      - key: PROXY_SECRET
+        value: "01a03626-786e-79a1-9d39-8d77a8bb0953"
+      - key: PROXY_URL
+        value: "http://01a03626-786e-79a1-9d39-8d77a7fcf978:01a03626-786e-79a1-9d39-8d77a8bb0953@proxy-us.proxy-cheap.com:5959"
