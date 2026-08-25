@@ -7,11 +7,11 @@ services:
       - key: AI_API_KEY
         sync: false
       - key: AI_MODEL
-        value: xiaomi/mimo-v2.5
+        value: qwen/qwen3.6-27b
       - key: AI_BASE_URL
-        value: https://openrouter.ai/api/v1
+        value: https://api.groq.com/openai/v1
       - key: AI_PROVIDER
-        value: openrouter
+        value: groq
       - key: DATABASE_URL
         value: sqlite+aiosqlite:///./browser_automation.db
       - key: API_AUTH_TOKEN
@@ -27,23 +27,33 @@ services:
       - key: GROQ_AGENT_1_API_KEY
         sync: false
       - key: GROQ_AGENT_1_MODEL
-        value: xiaomi/mimo-v2.5
+        value: qwen/qwen3.6-27b
+      - key: GROQ_AGENT_1_BASE_URL
+        value: https://api.groq.com/openai/v1
       - key: GROQ_AGENT_2_API_KEY
         sync: false
       - key: GROQ_AGENT_2_MODEL
-        value: xiaomi/mimo-v2.5
+        value: qwen/qwen3.6-27b
+      - key: GROQ_AGENT_2_BASE_URL
+        value: https://api.groq.com/openai/v1
       - key: GROQ_AGENT_3_API_KEY
         sync: false
       - key: GROQ_AGENT_3_MODEL
-        value: xiaomi/mimo-v2.5
+        value: qwen/qwen3.6-27b
+      - key: GROQ_AGENT_3_BASE_URL
+        value: https://api.groq.com/openai/v1
       - key: GROQ_AGENT_4_API_KEY
         sync: false
       - key: GROQ_AGENT_4_MODEL
-        value: xiaomi/mimo-v2.5
+        value: qwen/qwen3.6-27b
+      - key: GROQ_AGENT_4_BASE_URL
+        value: https://api.groq.com/openai/v1
       - key: GROQ_AGENT_5_API_KEY
         sync: false
       - key: GROQ_AGENT_5_MODEL
-        value: xiaomi/mimo-v2.5
+        value: qwen/qwen3.6-27b
+      - key: GROQ_AGENT_5_BASE_URL
+        value: https://api.groq.com/openai/v1
       - key: ALLOWED_DOMAINS
         value: ""
       - key: TASK_TIMEOUT
