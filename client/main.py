@@ -120,14 +120,17 @@ async def cmd_run(client: APIClient, config: ClientConfig) -> None:
             task = await client.create_task(
                 target_url, username, password, instruction
             )
+        except ValueError as e:
+            print_error(f"Validation failed for {username}: {e}")
+            continue
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 422:
-                print_error(f"Validation failed for {username}")
-            else:
-                print_error(f"HTTP {e.response.status_code}: {e}")
+            print_error(f"HTTP {e.response.status_code} for {username}")
+            continue
+        except httpx.TimeoutException:
+            print_error(f"Timeout creating task for {username} (backend too slow)")
             continue
         except (httpx.HTTPError, OSError) as e:
-            print_error(f"Failed to create task: {e}")
+            print_error(f"Connection error for {username}: {type(e).__name__}")
             continue
         task_id = task["task_id"]
         print_status(f"Task created: {task_id}")

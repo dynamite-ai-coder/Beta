@@ -56,9 +56,11 @@ class APIClient:
                             for e in error_msg
                         ]
                         error_msg = "\n".join(errors)
-                    print_error(f"Validation error: {error_msg}")
-                except (json.JSONDecodeError, ValueError):
-                    print_error(f"Validation error: {resp.text}")
+                    raise ValueError(error_msg)
+                except (json.JSONDecodeError, ValueError) as ve:
+                    if isinstance(ve, ValueError):
+                        raise
+                    raise ValueError(resp.text)
             resp.raise_for_status()
             return resp.json()
 
