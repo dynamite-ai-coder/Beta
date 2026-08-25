@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import logging
 
 import httpx
 
 from client.config import ClientConfig
+from client.ui import print_error
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,19 @@ class APIClient:
                     "natural_language_instruction": instruction,
                 },
             )
+            if resp.status_code == 422:
+                try:
+                    detail = resp.json()
+                    error_msg = detail.get("detail", str(detail))
+                    if isinstance(error_msg, list):
+                        errors = [
+                            f"  {e.get('loc', [])}: {e.get('msg', '')}"
+                            for e in error_msg
+                        ]
+                        error_msg = "\n".join(errors)
+                    print_error(f"Validation error: {error_msg}")
+                except (json.JSONDecodeError, ValueError):
+                    print_error(f"Validation error: {resp.text}")
             resp.raise_for_status()
             return resp.json()
 

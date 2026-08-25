@@ -92,6 +92,23 @@ async def cmd_run(client: APIClient, config: ClientConfig) -> None:
         username = cred["username"]
         password = cred["password"]
 
+        if len(username) > 512:
+            print_error(
+                f"Skipping {username}: username too long "
+                f"({len(username)} > 512 chars)"
+            )
+            continue
+        if len(password) > 1024:
+            print_error(
+                f"Skipping {username}: password too long "
+                f"({len(password)} > 1024 chars)"
+            )
+            continue
+
+        if len(instruction) > 4096:
+            instruction = instruction[:4096]
+            print_status("Instruction truncated to 4096 chars")
+
         if len(credentials) > 1:
             print_status(
                 f"\n--- [{i+1}/{len(credentials)}] "
@@ -103,6 +120,12 @@ async def cmd_run(client: APIClient, config: ClientConfig) -> None:
             task = await client.create_task(
                 target_url, username, password, instruction
             )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 422:
+                print_error(f"Validation failed for {username}")
+            else:
+                print_error(f"HTTP {e.response.status_code}: {e}")
+            continue
         except (httpx.HTTPError, OSError) as e:
             print_error(f"Failed to create task: {e}")
             continue
@@ -152,7 +175,7 @@ async def cmd_run(client: APIClient, config: ClientConfig) -> None:
         print_events(events)
 
         if len(credentials) > 1 and i < len(credentials) - 1:
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
 
 
 async def cmd_list(client: APIClient) -> None:
