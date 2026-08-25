@@ -33,7 +33,7 @@ class APIClient:
         password: str,
         instruction: str = "Log in with the provided credentials",
     ) -> dict:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 f"{self._config.api_url}/api/v1/task",
                 headers=self._headers,

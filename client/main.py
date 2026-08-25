@@ -99,9 +99,13 @@ async def cmd_run(client: APIClient, config: ClientConfig) -> None:
             )
 
         print_status(f"Creating task for {username}...")
-        task = await client.create_task(
-            target_url, username, password, instruction
-        )
+        try:
+            task = await client.create_task(
+                target_url, username, password, instruction
+            )
+        except (httpx.HTTPError, OSError) as e:
+            print_error(f"Failed to create task: {e}")
+            continue
         task_id = task["task_id"]
         print_status(f"Task created: {task_id}")
 
