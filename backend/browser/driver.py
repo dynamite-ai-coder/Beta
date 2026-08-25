@@ -83,10 +83,10 @@ def create_browser() -> WebDriver:
             version_main=None,
             use_subprocess=True,
         )
-    except Exception:
+    except Exception as e:
         logger.warning(
-            "undetected-chromedriver failed, "
-            "falling back to standard Chrome"
+            "undetected-chromedriver failed (%s), "
+            "falling back to standard Chrome", e
         )
         from selenium import webdriver
         from selenium.webdriver.chrome.service import Service
