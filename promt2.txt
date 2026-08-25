@@ -1,358 +1,225 @@
-You are an expert software architect and senior Python engineer.
+You are a senior software architect, AI systems engineer, Python engineer, browser automation engineer, and distributed-systems engineer.
 
-You are working directly on the existing GitHub repository:
+You are working on the existing GitHub repository:
 
 https://github.com/dynamite-ai-coder/Beta
 
-Your task is to thoroughly analyze, refactor, and extend the existing Beta project into a production-oriented distributed AI system.
+Your task is to deeply inspect the existing Beta project and transform it into a distributed Virtual AI platform with:
 
-DO NOT blindly rewrite the project.
-
-FIRST inspect the entire repository and understand the existing architecture, functionality, dependencies, API, browser automation, Groq integration, WebSocket implementation, database, client, Docker configuration, and Render configuration.
-
-Then implement the new architecture incrementally while preserving existing functionality wherever possible.
-
-============================================================
-PRIMARY OBJECTIVE
-============================================================
-
-Transform Beta into a system consisting of:
-
-1. A lightweight Render backend.
-2. A custom Virtual AI API.
-3. Five Groq-powered AI agents operating internally as ONE logical AI.
-4. An AI orchestrator responsible for communication between the five agents.
-5. Internal shared task/context memory.
-6. Multi-agent reasoning, critique, verification, and synthesis.
-7. A Windows Browser Client.
-8. Selenium + ChromeDriver + Chrome running ONLY on Windows.
-9. Secure WebSocket communication between Render and Windows.
-10. The ability for the Virtual AI to request browser operations.
-11. A final unified AI response exposed through the Beta API.
-12. Architecture optimized for Render Free with approximately 512 MB RAM.
-
-The external user must see Beta as ONE AI model/API.
-
-The user should NOT need to know that five separate Groq agents are operating internally.
-
-============================================================
-IMPORTANT RESOURCE CONSTRAINT
-============================================================
-
-The backend is intended to run on a Render Free instance with approximately 512 MB RAM and limited CPU.
-
-Therefore:
-
-Render MUST NOT run:
-
-- Chromium
-- Chrome
-- ChromeDriver
-- Selenium browser automation
-- local LLM inference
-- downloaded LLM weights
-- GPU workloads
-
-All browser automation must run on the user's Windows machine.
-
-All AI inference must be performed through external Groq APIs.
-
-Render should primarily perform:
-
-- FastAPI
-- API routing
-- Virtual AI orchestration
-- HTTP requests to Groq
-- WebSocket communication
-- authentication
+- five configurable Groq AI agents
+- one unified Virtual AI interface
+- multi-agent orchestration
+- an OpenAI-compatible API
+- a Render-compatible lightweight backend
+- a Windows Browser Client
+- local browser automation
+- Selenium + ChromeDriver + Chrome on Windows
+- browser-use integration on the Windows client
+- a local browser AI Web UI
+- local chat
+- file uploads
+- browser preview
+- WebSocket/WSS communication
 - task management
-- database operations
-- lightweight state management
-- JSON processing
-- logging
-- configuration
+- browser automation
+- AI/browser tool integration
 
-Keep the Render application as lightweight as possible.
+IMPORTANT:
+
+DO NOT blindly rewrite the repository.
+
+FIRST inspect the entire existing repository.
+
+Understand its current architecture, dependencies, API, client, browser automation, Groq integration, WebSocket implementation, database, configuration, Docker configuration, Render configuration, frontend, and existing functionality.
+
+Then design the migration.
+
+Only after understanding the existing code should you begin modifying it.
+
+Preserve existing working functionality wherever possible.
 
 ============================================================
-TARGET ARCHITECTURE
+1. HIGH-LEVEL GOAL
 ============================================================
 
-The target architecture is:
+Transform Beta into a distributed AI system with this architecture:
 
-                         USER / API CLIENT
-                                |
-                                v
-                    +-------------------------+
-                    |      BETA AI API        |
-                    |       RENDER            |
-                    +------------+------------+
-                                 |
-                                 v
-                    +-------------------------+
-                    |    AI ORCHESTRATOR      |
-                    +------------+------------+
-                                 |
-              +------------------+------------------+
-              |                  |                  |
-              v                  v                  v
-        +-----------+      +-----------+      +-----------+
-        |  AGENT 1  |      |  AGENT 2  |      |  AGENT 3  |
-        |  PLANNER  |      | RESEARCHER|      |  SOLVER   |
-        +-----------+      +-----------+      +-----------+
-              |                  |                  |
-              +------------------+------------------+
-                                 |
-                                 v
-                         +---------------+
-                         |    AGENT 4    |
-                         |    CRITIC     |
-                         +-------+-------+
-                                 |
-                                 v
-                         +---------------+
-                         |    AGENT 5    |
-                         | JUDGE/SYNTHES |
-                         +-------+-------+
-                                 |
-                                 v
-                         FINAL AI RESPONSE
-                                 |
-                                 v
-                              USER
-
-
-OPTIONAL BROWSER FLOW:
-
-                         VIRTUAL AI
-                             |
-                             v
-                       BROWSER TASK
-                             |
-                             v
-                         RENDER
+                         INTERNET
+                            |
+                            v
+                 +------------------------+
+                 |        RENDER          |
+                 |                        |
+                 |   BETA VIRTUAL AI      |
+                 |                        |
+                 |   Planner              |
+                 |   Researcher           |
+                 |   Solver               |
+                 |   Critic               |
+                 |   Judge                |
+                 |                        |
+                 |   Own API              |
+                 |   Task Manager         |
+                 |   AI Orchestrator      |
+                 +-----------+------------+
                              |
                             WSS
                              |
                              v
-                     WINDOWS CLIENT
+                 +------------------------+
+                 |    WINDOWS CLIENT      |
+                 |                        |
+                 |   Browser Agent        |
+                 |   browser-use          |
+                 |   Selenium             |
+                 |   ChromeDriver         |
+                 |   Chrome               |
+                 |                        |
+                 |   Local Web UI         |
+                 |   127.0.0.1:23400      |
+                 +-----------+------------+
                              |
-                     +-------+-------+
-                     |               |
-                     v               v
-                  Selenium       ChromeDriver
-                                     |
-                                     v
-                                   Chrome
-                                     |
-                                     v
-                                  Website
-                                     |
-                                     v
-                                Browser Result
-                                     |
-                                     v
-                                  Render
-                                     |
-                                     v
-                              Virtual AI
-                                     |
-                                     v
-                              Final Response
+                 +-----------+-----------+
+                 |                       |
+                 v                       v
+             CHAT / FILES          BROWSER PREVIEW
+                 |                       |
+                 +-----------+-----------+
+                             |
+                             v
+                           USER
+
+
+The final system should make the five Groq agents behave externally as ONE logical AI.
+
+The external user should not need to know that five different AI agents are operating internally.
 
 ============================================================
-PHASE 1 — FULL REPOSITORY ANALYSIS
+2. IMPORTANT RESOURCE ARCHITECTURE
 ============================================================
 
-Before modifying code, inspect the entire repository.
+The Render backend is intended to run on a Render Free instance with approximately 512 MB RAM.
 
-Identify:
+Therefore:
 
-- application entrypoints
-- FastAPI application
-- API routes
-- WebSocket implementation
-- REST API
+RENDER MUST NOT RUN:
+
+- Chrome
+- Chromium
+- ChromeDriver
+- Selenium browser sessions
+- browser-use browser sessions
+- local LLM inference
+- local AI model weights
+- GPU workloads
+
+All browser execution must happen on the user's Windows machine.
+
+Render should perform:
+
+- FastAPI
+- API handling
+- AI orchestration
+- Groq API requests
+- task management
+- WebSocket/WSS communication
 - authentication
-- database
-- models
-- task system
-- scheduler
-- background workers
-- Groq integration
-- AI providers
-- Selenium usage
-- ChromeDriver initialization
-- Chrome/Chromium installation
-- browser session management
-- browser actions
+- lightweight state
+- database operations
+- JSON processing
+
+The Windows Client performs:
+
+- Chrome
+- ChromeDriver
+- Selenium
+- browser-use
+- browser sessions
 - screenshots
 - browser preview
-- proxy handling
-- client implementation
-- configuration
-- environment variables
-- Dockerfile
-- render.yaml
-- requirements.txt
-- frontend
-- tests
-- documentation
+- browser tasks
+- local Web UI
+- file handling
+- communication with Render
 
-Search the repository for:
-
-selenium
-webdriver
-webdriver.Chrome
-ChromeDriver
-undetected_chromedriver
-chromium
-chrome
-browser
-browser_session
-browser_task
-WebSocket
-websocket
-Groq
-groq
-AI_API_KEY
-AI_MODEL
-AI_BASE_URL
-AI_PROVIDER
-TASK_TIMEOUT
-BROWSER_SESSION_TIMEOUT
-PREVIEW_ENABLED
-PREVIEW_TOKEN_SECRET
-API_AUTH_TOKEN
-PROXY_ENABLED
-PROXY_APIKEY
-PROXY_SECRET
-PROXY_URL
-
-Do not make architectural assumptions before inspecting the existing code.
+This separation is critical.
 
 ============================================================
-PHASE 2 — PRESERVE EXISTING FUNCTIONALITY
+3. FIVE GROQ AI AGENTS
 ============================================================
 
-Do not unnecessarily remove or rewrite existing features.
+Create five logical AI agents.
 
-Where existing code can be reused, reuse it.
-
-Where existing functionality conflicts with the new architecture, refactor it carefully.
-
-Maintain backwards compatibility with existing APIs when practical.
-
-If an existing endpoint or component must change, document the change.
-
-============================================================
-VIRTUAL AI MODEL
-============================================================
-
-The central feature is a Virtual AI Model.
-
-Beta must expose one logical AI to external clients.
-
-Internally, Beta consists of five Groq-powered agents.
-
-The external client should see something similar to:
-
-model = "beta-virtual-ai"
-
-The user sends:
-
-POST /v1/chat/completions
-
-Example:
-
-{
-  "model": "beta-virtual-ai",
-  "messages": [
-    {
-      "role": "user",
-      "content": "Solve this task..."
-    }
-  ]
-}
-
-The external API must return one coherent response.
-
-Internally, the request is processed by the multi-agent system.
-
-The internal architecture must remain hidden from normal API users.
-
-============================================================
-FIVE AI AGENTS
-============================================================
-
-Create five logical AI roles.
+The roles should be:
 
 AGENT 1:
-ARCHITECT / PLANNER
+PLANNER / ARCHITECT
 
 Responsibilities:
 
-- understand the user request
-- break complex tasks into subtasks
-- determine strategy
-- determine whether browser automation is needed
-- create an execution plan
+- understand the user's request
+- decompose complex tasks
+- create a plan
+- identify required tools
+- decide whether browser automation is needed
+- decide whether file analysis is needed
+- delegate work
 
 AGENT 2:
 RESEARCHER / ANALYST
 
 Responsibilities:
 
-- analyze available information
-- inspect evidence
+- analyze information
+- research available information through approved tools
+- analyze browser results
+- analyze files
+- identify relevant facts
 - identify missing information
-- research using available tools/data
-- provide findings to the other agents
+- provide evidence
 
 AGENT 3:
-SOLVER
+SOLVER / EXECUTOR
 
 Responsibilities:
 
-- solve the actual task
-- generate candidate solutions
-- propose browser actions when needed
-- reason over information supplied by other agents
+- solve the task
+- generate solutions
+- execute reasoning steps
+- generate browser task plans
+- use available tools
+- transform information into actionable operations
 
 AGENT 4:
 CRITIC / VERIFIER
 
 Responsibilities:
 
+- inspect proposed results
+- identify errors
 - challenge assumptions
-- detect errors
-- detect unsupported conclusions
-- verify important claims
-- identify missing evidence
-- request additional work when necessary
+- verify important information
+- detect contradictions
+- request additional work if necessary
 
 AGENT 5:
 JUDGE / SYNTHESIZER
 
 Responsibilities:
 
-- evaluate all available reasoning
-- determine the best solution
+- evaluate the outputs of all agents
 - resolve disagreements
-- decide whether additional deliberation is required
-- produce the final coherent answer
-
-These roles should be configurable.
-
-Do not hard-code the implementation so that changing models later requires rewriting the architecture.
+- determine the best result
+- decide whether another deliberation round is necessary
+- generate the final coherent answer
 
 ============================================================
-GROQ CONFIGURATION
+4. GROQ API CONFIGURATION
 ============================================================
 
-Support five independently configurable Groq agents.
+The system must support five independent Groq configurations.
 
-Use environment variables such as:
+Use environment variables:
 
 GROQ_AGENT_1_API_KEY
 GROQ_AGENT_1_MODEL
@@ -377,157 +244,83 @@ GROQ_AGENT_3_BASE_URL
 GROQ_AGENT_4_BASE_URL
 GROQ_AGENT_5_BASE_URL
 
-All secrets MUST remain server-side.
+Do not hard-code any API key.
 
-NEVER send Groq API keys to the Windows client.
+Do not expose any Groq API key to:
 
-NEVER expose Groq API keys through the public API.
+- browser
+- Windows Client
+- frontend
+- JavaScript
+- public API
+- logs
+- WebSocket messages
 
-NEVER log Groq API keys.
+All Groq credentials must remain server-side.
 
 ============================================================
-IMPORTANT GROQ RATE LIMIT RULE
+5. GROQ KEY/RATE LIMIT HANDLING
 ============================================================
 
-Do NOT assume that five API keys automatically provide five times the rate limit.
+Do NOT assume that five API keys automatically mean five times the rate limit.
 
-Treat each configured credential according to the actual limits imposed by Groq.
-
-Implement proper handling for:
-
-- HTTP 429
-- rate limits
-- timeout
-- temporary API failures
-- unavailable model
-- invalid API key
-- network errors
+The system must treat the configured credentials according to their actual provider limits.
 
 Implement:
 
-- retries
+- timeout handling
+- retry
 - exponential backoff
-- configurable timeout
-- graceful failure
-- optional fallback model/key
+- HTTP 429 handling
+- API errors
+- invalid key handling
+- model unavailable handling
+- temporary network failure handling
 
-Do not create infinite retry loops.
+Retries must be bounded.
 
-============================================================
-MULTI-AGENT ORCHESTRATOR
-============================================================
+Never create infinite retry loops.
 
-Implement a central AI Orchestrator.
+Create a reusable Groq client abstraction instead of duplicating Groq API code five times.
 
-The orchestrator controls:
+For example:
 
-- agent order
-- agent communication
-- shared context
-- task state
-- deliberation rounds
-- browser tasks
-- error handling
-- final synthesis
-
-Agents should NOT directly communicate through independent network connections.
-
-Instead:
-
-Agent -> Orchestrator -> Agent
-
-The orchestrator acts as the communication bus.
+GroqAgentClient
 
 ============================================================
-INTERNAL AGENT COMMUNICATION
+6. VIRTUAL AI
 ============================================================
 
-Agents must be able to communicate structured information.
+Expose the entire five-agent system externally as one AI.
 
-Do not rely exclusively on free-form natural language.
+The public model name should be:
 
-Use structured internal messages.
+beta-virtual-ai
+
+The external user should interact with:
+
+POST /v1/chat/completions
 
 Example:
 
 {
-  "agent": "researcher",
-  "type": "analysis",
-  "task_id": "123",
-  "content": "...",
-  "confidence": 0.87,
-  "evidence": [],
-  "recommendation": "...",
-  "requested_action": null
+  "model": "beta-virtual-ai",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Analyze this task and solve it."
+    }
+  ]
 }
 
-Another example:
+The user should receive ONE coherent final response.
 
-{
-  "agent": "critic",
-  "type": "challenge",
-  "target_agent": "solver",
-  "claim": "...",
-  "reason": "...",
-  "severity": "high",
-  "requested_action": "VERIFY"
-}
-
-The exact schema may be improved based on the existing project.
-
-============================================================
-SHARED AI CONTEXT
-============================================================
-
-Create an internal context object for every AI workflow.
-
-The context can contain:
-
-- task_id
-- original user request
-- current plan
-- agent outputs
-- important facts
-- evidence
-- browser observations
-- browser screenshots metadata
-- errors
-- decisions
-- confidence
-- current state
-- final answer
-
-Do NOT blindly send the entire context to every model.
-
-Use compact context selection.
-
-Avoid unnecessary token usage.
-
-Avoid unnecessary memory usage.
-
-Implement limits such as:
-
-MAX_CONTEXT_SIZE
-MAX_AGENT_OUTPUT_SIZE
-MAX_EVIDENCE_ITEMS
-MAX_DELIBERATION_ROUNDS
-
-These should be configurable.
-
-============================================================
-DELIBERATION LOOP
-============================================================
-
-The agents should not simply answer independently and concatenate their answers.
-
-Implement actual collaborative reasoning.
-
-Recommended default flow:
+Internally:
 
 USER
  |
  v
-ARCHITECT
+PLANNER
  |
  v
 RESEARCHER
@@ -538,92 +331,187 @@ SOLVER
  v
 CRITIC
  |
- +--------------------------+
- |                          |
- | PROBLEM FOUND            | NO PROBLEM
- |                          |
- v                          v
-RESEARCHER/SOLVER          JUDGE
- |                          |
- v                          v
-CRITIC                 FINAL RESPONSE
+ v
+JUDGE
  |
- +---- repeat if necessary
+ v
+FINAL RESPONSE
 
-Implement:
+The user should not see internal agent reasoning by default.
+
+Do not expose private chain-of-thought.
+
+If a debug mode exists, expose only safe metadata and summaries.
+
+============================================================
+7. AI ORCHESTRATOR
+============================================================
+
+Create a central:
+
+AIOrchestrator
+
+The orchestrator controls:
+
+- agent execution
+- agent communication
+- context
+- task state
+- tool selection
+- browser requests
+- deliberation
+- error handling
+- final synthesis
+
+Agents should communicate through the orchestrator.
+
+Do not make the five agents directly communicate through separate network services.
+
+Use:
+
+Agent -> Orchestrator -> Agent
+
+============================================================
+8. STRUCTURED AGENT MESSAGES
+============================================================
+
+Use structured internal messages.
+
+Example:
+
+{
+  "agent": "researcher",
+  "type": "analysis",
+  "task_id": "123",
+  "content": "...",
+  "confidence": 0.91,
+  "evidence": [],
+  "requested_tool": null
+}
+
+Critic example:
+
+{
+  "agent": "critic",
+  "type": "verification",
+  "target_agent": "solver",
+  "severity": "medium",
+  "issue": "...",
+  "recommendation": "..."
+}
+
+Adapt schemas to the existing project.
+
+Do not force unnecessarily complex structures.
+
+============================================================
+9. SHARED AI CONTEXT
+============================================================
+
+Every AI workflow should have an internal context.
+
+The context may contain:
+
+- task_id
+- user request
+- conversation messages
+- current plan
+- relevant agent outputs
+- evidence
+- browser observations
+- browser task state
+- uploaded file metadata
+- extracted file content
+- errors
+- decisions
+- confidence
+- final answer
+
+Do not blindly send the entire context to every model.
+
+Use compact relevant context.
+
+Implement configurable limits:
+
+MAX_CONTEXT_SIZE
+MAX_AGENT_OUTPUT_SIZE
+MAX_EVIDENCE_ITEMS
+MAX_FILE_CONTEXT_SIZE
+MAX_DELIBERATION_ROUNDS
+
+============================================================
+10. DELIBERATION
+============================================================
+
+Do not simply call five models and concatenate their responses.
+
+Implement a real multi-agent workflow.
+
+Default flow:
+
+USER
+ |
+ v
+PLANNER
+ |
+ v
+RESEARCHER
+ |
+ v
+SOLVER
+ |
+ v
+CRITIC
+ |
+ +---------------------------+
+ |                           |
+ | PROBLEM                   | ACCEPTED
+ |                           |
+ v                           v
+RESEARCHER/SOLVER           JUDGE
+ |                           |
+ v                           v
+CRITIC                  FINAL RESPONSE
+
+Use:
 
 MAX_DELIBERATION_ROUNDS=2
 
-or another safe configurable value.
+as the default unless the existing architecture suggests a better value.
 
-Never allow infinite agent loops.
-
-============================================================
-AGENT VOTING / CONSENSUS
-============================================================
-
-Where appropriate, the Judge should compare competing conclusions.
-
-The system may use:
-
-- confidence scores
-- evidence quality
-- critic objections
-- agreement between agents
-- task-specific rules
-
-Do not blindly select the majority answer.
-
-The Judge should prioritize evidence and logical consistency.
+Never allow infinite loops.
 
 ============================================================
-ONE FINAL RESPONSE
+11. AGENT CONSENSUS
 ============================================================
 
-The user must normally receive only the final synthesized answer.
+The Judge should evaluate:
 
-Do NOT expose:
+- evidence
+- confidence
+- critic feedback
+- consistency
+- task requirements
+- browser observations
+- file analysis
 
-- internal chain of thought
-- private agent reasoning
-- hidden prompts
-- API keys
-- internal credentials
-- internal communication
+Do not blindly use majority voting.
 
-The system may expose a high-level summary such as:
-
-"Multiple specialized agents analyzed the task."
-
-But do not expose private internal reasoning.
+The Judge should prefer verified evidence and logical consistency.
 
 ============================================================
-OWN API
+12. OWN OPENAI-COMPATIBLE API
 ============================================================
 
-Create a custom Beta AI API.
-
-Prefer an OpenAI-compatible interface.
-
-Implement:
+Expose:
 
 POST /v1/chat/completions
 
-Request:
+Use:
 
-{
-  "model": "beta-virtual-ai",
-  "messages": [
-    {
-      "role": "user",
-      "content": "Hello"
-    }
-  ]
-}
+model = "beta-virtual-ai"
 
-Response should follow a common OpenAI-compatible structure where practical.
-
-Example:
+Example response:
 
 {
   "id": "beta-...",
@@ -634,207 +522,409 @@ Example:
       "index": 0,
       "message": {
         "role": "assistant",
-        "content": "..."
+        "content": "Final response..."
       },
       "finish_reason": "stop"
     }
   ]
 }
 
-Add appropriate timestamps and usage information if practical.
-
-The API should hide the underlying Groq models.
+Make the API compatible with common OpenAI-style clients wherever practical.
 
 ============================================================
-MODEL NAME
+13. API AUTHENTICATION
 ============================================================
 
-Expose:
+Protect the Beta API.
 
-beta-virtual-ai
-
-as the default virtual model name.
-
-The internal models may be different.
-
-Example:
-
-beta-virtual-ai
-    |
-    +-- llama model
-    +-- llama model
-    +-- another Groq model
-    +-- another Groq model
-    +-- another Groq model
-
-Do not expose the actual configuration unless an administrator explicitly requests it.
-
-============================================================
-API AUTHENTICATION
-============================================================
-
-Protect the custom Beta API.
-
-Use an API authentication mechanism.
-
-Do not hard-code credentials.
-
-Use environment variables.
-
-For example:
+Use a server-side configurable credential such as:
 
 BETA_API_KEY
 
-or a stronger configurable authentication system if the existing project already contains one.
+or reuse the existing authentication system if Beta already has one.
 
-API clients should authenticate with Beta.
+Never hard-code credentials.
 
-Groq credentials must remain completely separate.
-
-============================================================
-STREAMING
-============================================================
-
-If streaming is implemented, external streaming should represent the final Virtual AI response.
-
-Do NOT stream every internal agent response to the user.
-
-Internal agent communication remains internal.
-
-If reliable streaming is difficult within the first implementation, implement non-streaming first.
+Never expose server credentials to the browser client.
 
 ============================================================
-CONCURRENCY
+14. WINDOWS CLIENT
 ============================================================
 
-Render Free has limited resources.
+Create/refactor a dedicated Windows Client.
 
-Do not allow unlimited simultaneous AI workflows.
+The Windows Client is responsible for local browser automation.
 
-Implement:
+It must run on Windows.
 
-MAX_AI_WORKFLOWS=1
+It should contain:
 
-as the conservative default.
-
-Use a queue for additional requests.
-
-The architecture should allow the value to be increased later.
-
-Do not create uncontrolled concurrent Groq requests.
-
-Where safe, independent agent operations may be executed concurrently, but the default design should prioritize reliability and low memory usage.
-
-============================================================
-RENDER MEMORY OPTIMIZATION
-============================================================
-
-The Render backend must be optimized for approximately 512 MB RAM.
-
-Do NOT:
-
-- download LLMs
-- load model weights
-- run local inference
-- install Chrome
-- install Chromium
-- install ChromeDriver
-- execute Selenium
-- run browser automation
-- create huge in-memory caches
-- retain unlimited conversation history
-- retain unlimited agent outputs
-
-Minimize dependencies.
-
-Prefer lightweight HTTP clients.
-
-Use asynchronous I/O where appropriate.
-
-Do not create unnecessary worker processes.
-
-Avoid excessive background workers.
-
-============================================================
-BROWSER AUTOMATION MUST RUN ON WINDOWS
-============================================================
-
-All browser automation must be moved out of Render.
-
-The Windows client must contain:
-
+- Browser Agent
+- browser-use integration
 - Selenium
 - ChromeDriver
 - Chrome
-- browser lifecycle
-- browser task execution
-- browser screenshots
-- browser navigation
-- browser interaction
+- WebSocket client
+- local Web UI
+- file handling
+- browser preview
+- task executor
+- configuration
+- authentication
 
-Render must not require Selenium to execute browser tasks.
-
-============================================================
-WINDOWS BROWSER CLIENT
-============================================================
-
-Create or refactor a dedicated Windows Browser Agent.
-
-Suggested structure:
+Possible structure:
 
 client/
     main.py
-    agent.py
-    browser.py
-    task_executor.py
-    websocket_client.py
-    auth.py
     config.py
+    auth.py
+    websocket_client.py
+    browser/
+        manager.py
+        worker.py
+        selenium_adapter.py
+        browser_use_adapter.py
+        screenshots.py
+    ui/
+        app.py
+        routes.py
+        websocket.py
+        templates/
+        static/
+    files/
+        manager.py
+        upload.py
+    tasks/
+        executor.py
+        queue.py
     models.py
     logging_config.py
 
-Adapt this structure to the existing repository if a better organization exists.
-
-The Windows client must:
-
-1. Start.
-2. Load configuration.
-3. Authenticate.
-4. Connect to Render.
-5. Establish WSS.
-6. Start Chrome.
-7. Start ChromeDriver/Selenium.
-8. Verify browser readiness.
-9. Send BROWSER_READY.
-10. Wait for tasks.
+Adapt this structure to the existing repository.
 
 ============================================================
-BROWSER WORKER ARCHITECTURE
+15. BROWSER-USE INTEGRATION
 ============================================================
 
-The first implementation should support:
+Integrate browser-use on the Windows Client side.
 
-MAX_BROWSER_WORKERS=1
+IMPORTANT:
 
-by default.
+browser-use must NOT run on Render.
 
-However, design the code so it can later support multiple browser workers.
+It must run locally on Windows.
 
-Use a worker abstraction:
+Use browser-use as a browser automation/agent layer where appropriate.
 
-BrowserWorker
-BrowserWorkerManager
+Create an abstraction so the system is not permanently coupled to a single browser automation framework.
 
-Example future configuration:
+For example:
 
-MAX_BROWSER_WORKERS=1
+BrowserAgent
+    |
+    +-- BrowserUseAdapter
+    |
+    +-- SeleniumAdapter
+
+The existing Selenium implementation should remain usable.
+
+The browser-use integration should be optional/configurable.
+
+Example:
+
+BROWSER_ENGINE=browser-use
 
 or:
 
-MAX_BROWSER_WORKERS=5
+BROWSER_ENGINE=selenium
 
-Do NOT hard-code the system to exactly one browser.
+If practical, support:
 
-The initial default must remain one browser because of resource usage.
+BROWSER_ENGINE=auto
 
-=================================
+where the client chooses the appropriate implementation.
+
+Do not unnecessarily duplicate browser logic.
+
+============================================================
+16. BROWSER AGENT ARCHITECTURE
+============================================================
+
+Create a unified BrowserAgent interface.
+
+Example conceptual methods:
+
+start()
+stop()
+restart()
+navigate()
+click()
+type()
+scroll()
+wait()
+extract()
+screenshot()
+get_page_state()
+execute_task()
+
+The actual implementation may differ.
+
+The AI should communicate with BrowserAgent through a controlled tool interface.
+
+Do not expose arbitrary Python execution.
+
+============================================================
+17. BROWSER-USE + SELENIUM
+============================================================
+
+The goal is NOT to run two independent browsers.
+
+Prefer one managed browser session.
+
+Where browser-use can control the browser, use it.
+
+Where existing Beta Selenium functionality is needed, use the Selenium adapter.
+
+The BrowserManager should own the lifecycle.
+
+Example:
+
+BrowserManager
+ |
+ +-- BrowserUseAdapter
+ |
+ +-- SeleniumAdapter
+ |
+ +-- ScreenshotManager
+ |
+ +-- TaskExecutor
+
+============================================================
+18. LOCAL WEB UI
+============================================================
+
+When the Windows Client starts, it must start a local Web UI.
+
+The default address must be:
+
+http://127.0.0.1:23400
+
+Do NOT bind the UI to 0.0.0.0 by default.
+
+The UI should be accessible only from the local machine.
+
+The port must be configurable:
+
+LOCAL_UI_HOST=127.0.0.1
+LOCAL_UI_PORT=23400
+
+If the port is occupied, report a clear error or provide an optional automatic fallback.
+
+============================================================
+19. LOCAL UI EXPERIENCE
+============================================================
+
+The local UI should resemble the user experience of a modern browser AI assistant.
+
+It should contain:
+
+- chat
+- message history
+- text input
+- send button
+- file upload
+- browser preview
+- browser status
+- task status
+- connection status
+- optional task progress
+- error notifications
+
+Example conceptual layout:
+
++--------------------------------------------------------------+
+|                    BETA BROWSER AI                           |
++-------------------------------+------------------------------+
+|                               |                              |
+|       BROWSER PREVIEW         |            CHAT              |
+|                               |                              |
+|   +-----------------------+   |  User:                       |
+|   |                       |   |  Open this website...        |
+|   |       CHROME          |   |                              |
+|   |                       |   |  AI:                         |
+|   |       WEBSITE         |   |  I am browsing...            |
+|   |                       |   |                              |
+|   +-----------------------+   |                              |
+|                               |  +--------------------------+ |
+|                               |  | Type your message...     | |
+|                               |  +--------------------------+ |
+|                               |                              |
+|                               |  [Attach File]   [Send]      |
++-------------------------------+------------------------------+
+| Browser: Connected | AI: Connected | Task: Running            |
++--------------------------------------------------------------+
+
+Do not copy proprietary UI code.
+
+Create an original implementation with a similar workflow.
+
+============================================================
+20. BROWSER PREVIEW
+============================================================
+
+The UI must provide a browser preview.
+
+The first implementation should prefer lightweight screenshot-based preview.
+
+Recommended flow:
+
+Chrome
+ |
+ v
+Screenshot
+ |
+ v
+Windows Client
+ |
+ v
+Local UI
+ |
+ v
+Browser Preview
+
+Use configurable screenshot frequency.
+
+Do not continuously send huge uncompressed screenshots.
+
+Implement compression and size limits.
+
+Example:
+
+BROWSER_PREVIEW_ENABLED=true
+BROWSER_PREVIEW_FPS=2
+
+or another sensible default.
+
+============================================================
+21. FUTURE INTERACTIVE BROWSER PREVIEW
+============================================================
+
+Design the browser preview so that it can later become interactive.
+
+Future features may include:
+
+- click
+- scroll
+- keyboard input
+- mouse events
+
+Do not implement a complex remote desktop system unless necessary.
+
+The first version can use screenshot preview + controlled BrowserAgent commands.
+
+============================================================
+22. CHAT
+============================================================
+
+The local UI chat should communicate with the Beta Virtual AI.
+
+Flow:
+
+Local UI
+ |
+ v
+Windows Client
+ |
+ v
+WSS / HTTPS
+ |
+ v
+Render
+ |
+ v
+Beta Virtual AI
+ |
+ v
+Five Groq Agents
+ |
+ v
+Final response
+ |
+ v
+Windows Client
+ |
+ v
+Local UI
+
+The user should be able to chat naturally.
+
+============================================================
+23. FILE UPLOADS
+============================================================
+
+The local UI must support file upload.
+
+At minimum design the system for:
+
+- TXT
+- PDF
+- DOCX
+- CSV
+- JSON
+- PNG
+- JPG/JPEG
+
+The architecture should allow additional formats later.
+
+Flow:
+
+USER
+ |
+ v
+Local UI
+ |
+ v
+Windows Client
+ |
+ v
+File validation
+ |
+ v
+Render / Virtual AI
+ |
+ v
+File analysis
+ |
+ v
+Five AI agents
+ |
+ v
+Final response
+
+Where possible, keep large files local and send only required extracted content to Render.
+
+Do not unnecessarily upload huge files to Render.
+
+Implement configurable:
+
+MAX_UPLOAD_SIZE
+
+============================================================
+24. FILE SECURITY
+============================================================
+
+Validate:
+
+- file size
+- extension
+- MIME type where possible
+- filename
+- content type
+
+Do not execute uploaded files.
+
+Do not treat uploaded documents as trusted instructions.
+
+Protect against prompt injection in uploaded content.
+
+================
