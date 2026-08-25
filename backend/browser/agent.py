@@ -156,9 +156,20 @@ class BrowserAgent:
         except (
             OSError, WebDriverException, TimeoutException
         ) as e:
-            logger.error("Login execution failed: %s", e)
+            logger.error(
+                "Login execution failed: %s [%s]",
+                e, type(e).__name__,
+            )
             self._state = TaskState.FAILURE
-            result["reason"] = f"Error: {e!s}"
+            result["reason"] = f"{type(e).__name__}: {e}"
+
+        except Exception as e:
+            logger.error(
+                "Unexpected error in login: %s [%s]",
+                e, type(e).__name__,
+            )
+            self._state = TaskState.FAILURE
+            result["reason"] = f"{type(e).__name__}: {e}"
 
         return result
 

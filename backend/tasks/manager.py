@@ -141,10 +141,14 @@ class TaskManager:
         except (
             OSError, WebDriverException,
             TimeoutException, ValueError,
+            RuntimeError, Exception,
         ) as e:
-            logger.error("Task execution error: %s", e)
+            logger.error(
+                "Task %s execution error: %s [%s]",
+                task_id, e, type(e).__name__,
+            )
             await self.update_task_state(
-                task_id, TaskState.FAILURE, str(e)
+                task_id, TaskState.FAILURE, f"{type(e).__name__}: {e}"
             )
         finally:
             agent.close_browser()
