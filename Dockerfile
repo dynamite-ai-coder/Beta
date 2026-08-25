@@ -39,6 +39,8 @@ RUN mkdir -p /app/img /app/static
 EXPOSE 8000
 
 ENV MALLOC_TRIM_THRESHOLD_=65536
+ENV MALLOC_MMAP_THRESHOLD_=65536
+ENV MALLOC_MMAP_MAX_=0
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1

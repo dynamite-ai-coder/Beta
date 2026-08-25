@@ -67,7 +67,7 @@ def create_browser() -> WebDriver:
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--window-size=1280,720")
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-infobars")
     options.add_argument("--disable-browser-side-navigation")
@@ -77,6 +77,17 @@ def create_browser() -> WebDriver:
     options.add_argument("--remote-debugging-port=0")
     options.add_argument("--user-data-dir=/tmp/chrome-profile")
     options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--js-flags=--max-old-space-size=256")
+    options.add_argument("--disable-features=TranslateUI")
+    options.add_argument("--disable-features=Translate")
+    options.add_argument("--disable-background-networking")
+    options.add_argument("--disable-default-apps")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-sync")
+    options.add_argument("--no-first-run")
+    options.add_argument("--single-process")
+    options.add_argument("--no-zygote")
+    options.add_argument("--disable-setuid-sandbox")
     options.add_argument(
         "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
