@@ -17,6 +17,8 @@ from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
+WORKFLOW_TIMEOUT = 180
+
 
 class AIOrchestrator:
     def __init__(self) -> None:
@@ -33,7 +35,13 @@ class AIOrchestrator:
             self._active_workflows += 1
 
         try:
-            return await self._run_workflow(request)
+            return await asyncio.wait_for(
+                self._run_workflow(request),
+                timeout=WORKFLOW_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.error("AI workflow timed out")
+            return self._build_timeout_response(request)
         finally:
             async with self._lock:
                 self._active_workflows -= 1
@@ -55,6 +63,8 @@ class AIOrchestrator:
             ctx.plan = parsed.get("plan", [])
             ctx.needs_browser = parsed.get("needs_browser", False)
             ctx.facts.extend(parsed.get("plan", [])[:5])
+        else:
+            logger.warning(f"Planner agent failed: {plan_output.error}")
 
         researcher_output = await self._run_agent(AgentRole.RESEARCHER, ctx)
         ctx.agent_outputs["researcher"] = researcher_output
@@ -62,6 +72,8 @@ class AIOrchestrator:
             parsed = researcher_output.parsed
             ctx.evidence.extend(parsed.get("evidence", [])[:settings.max_evidence_items])
             ctx.facts.extend(parsed.get("findings", [])[:5])
+        else:
+            logger.warning(f"Researcher agent failed: {researcher_output.error}")
 
         solver_output = await self._run_agent(AgentRole.SOLVER, ctx)
         ctx.agent_outputs["solver"] = solver_output
@@ -74,6 +86,8 @@ class AIOrchestrator:
                     "task_id": task_id,
                     "actions": parsed["browser_actions"],
                 }
+        else:
+            logger.warning(f"Solver agent failed: {solver_output.error}")
 
         for round_num in range(ctx.max_deliberation_rounds):
             ctx.deliberation_round = round_num + 1
@@ -86,16 +100,22 @@ class AIOrchestrator:
                     break
                 issues = parsed.get("issues", [])
                 for issue in issues:
-                    ctx.errors.append(f"[{issue.get('severity', 'low')}] {issue.get('description', '')}")
+                    ctx.errors.append(
+                        f"[{issue.get('severity', 'low')}] {issue.get('description', '')}"
+                    )
                 if round_num < ctx.max_deliberation_rounds - 1:
                     solver_output = await self._run_agent(AgentRole.SOLVER, ctx)
                     ctx.agent_outputs["solver"] = solver_output
+            else:
+                logger.warning(f"Critic agent failed: {critic_output.error}")
+                break
 
         judge_output = await self._run_agent(AgentRole.JUDGE, ctx)
         ctx.agent_outputs["judge"] = judge_output
         if judge_output.success:
             ctx.final_answer = judge_output.raw_response
         else:
+            logger.warning(f"Judge agent failed: {judge_output.error}")
             ctx.final_answer = self._build_fallback_answer(ctx)
 
         ctx.state = "completed"
@@ -123,6 +143,7 @@ class AIOrchestrator:
     async def _run_agent(self, role: AgentRole, ctx: AIContext) -> AgentOutput:
         agent = self.agents[role]
         context_summary = ctx.get_compact_summary()
+
         if role == AgentRole.PLANNER:
             prompt = ctx.original_request
         elif role == AgentRole.JUDGE:
@@ -130,7 +151,10 @@ class AIOrchestrator:
             for name, out in ctx.agent_outputs.items():
                 if out.success:
                     summaries.append(f"[{name}] {out.raw_response[:500]}")
-            prompt = f"Original request: {ctx.original_request}\n\nAgent outputs:\n" + "\n".join(summaries)
+            prompt = (
+                f"Original request: {ctx.original_request}\n\n"
+                f"Agent outputs:\n" + "\n".join(summaries)
+            )
             if ctx.errors:
                 prompt += f"\n\nCritic issues: {json.dumps(ctx.errors[:5])}"
         else:
@@ -140,7 +164,13 @@ class AIOrchestrator:
             if ctx.errors:
                 prompt += f"\nKnown issues: {', '.join(ctx.errors[:3])}"
 
-        return await agent.chat(prompt, context_summary)
+        try:
+            return await agent.chat(prompt, context_summary)
+        except Exception as e:
+            logger.error(f"Agent {role.value} raised exception: {e}")
+            return AgentOutput(
+                agent=role, success=False, error=f"Agent exception: {e}",
+            )
 
     def _extract_user_message(self, request: VirtualAIRequest) -> str:
         for msg in reversed(request.messages):
@@ -153,7 +183,30 @@ class AIOrchestrator:
             return ctx.agent_outputs["solver"].raw_response
         if ctx.agent_outputs.get("researcher") and ctx.agent_outputs["researcher"].success:
             return ctx.agent_outputs["researcher"].raw_response
-        return "I apologize, but I was unable to process your request at this time. Please try again."
+        return (
+            "I apologize, but I was unable to process your request "
+            "at this time. Please try again."
+        )
+
+    def _build_timeout_response(self, request: VirtualAIRequest) -> VirtualAIResponse:
+        task_id = f"beta-{uuid.uuid4().hex[:12]}"
+        return VirtualAIResponse(
+            id=task_id,
+            created=int(datetime.now(timezone.utc).timestamp()),
+            model=settings.virtual_model_name,
+            choices=[VirtualAIChoice(
+                index=0,
+                message={
+                    "role": "assistant",
+                    "content": (
+                        "I apologize, but the request timed out. "
+                        "Please try a simpler request or try again later."
+                    ),
+                },
+                finish_reason="stop",
+            )],
+            usage=VirtualAIUsage(),
+        )
 
 
 orchestrator = AIOrchestrator()

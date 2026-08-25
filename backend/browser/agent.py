@@ -2,20 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-
-from selenium.common.exceptions import (
-    TimeoutException,
-    WebDriverException,
-)
+from typing import Any
 
 from backend.ai.identifier import ElementIdentifier
-from backend.browser.driver import (
-    collect_dom_elements,
-    create_browser,
-    detect_captcha,
-    navigate_safe,
-    take_screenshot,
-)
 from backend.models.schemas import AISelectors, TaskState
 
 logger = logging.getLogger(__name__)
@@ -65,6 +54,7 @@ class BrowserAgent:
         self._state = value
 
     def start_browser(self) -> None:
+        from backend.browser.driver import create_browser
         self._driver = create_browser()
         self._state = TaskState.STARTING
 
@@ -72,7 +62,7 @@ class BrowserAgent:
         if self._driver:
             try:
                 self._driver.quit()
-            except (OSError, WebDriverException) as e:
+            except (OSError, Exception) as e:
                 logger.debug("Browser close error: %s", e)
             self._driver = None
 
@@ -96,6 +86,10 @@ class BrowserAgent:
         }
 
         try:
+            from backend.browser.driver import (
+                navigate_safe, detect_captcha, collect_dom_elements,
+            )
+
             nav_ok = await asyncio.to_thread(
                 navigate_safe, self._driver, target_url
             )
@@ -108,32 +102,24 @@ class BrowserAgent:
             )
             if is_captcha:
                 self._state = TaskState.WAITING_FOR_MANUAL_ACTION
-                result["state"] = (
-                    TaskState.WAITING_FOR_MANUAL_ACTION
-                )
-                result["reason"] = (
-                    "CAPTCHA detected. Manual action required."
-                )
+                result["state"] = TaskState.WAITING_FOR_MANUAL_ACTION
+                result["reason"] = "CAPTCHA detected. Manual action required."
                 return result
 
-            elements = await asyncio.to_thread(self._extract_elements)
-            selectors = await self._ai.identify_elements(
-                elements
+            elements = await asyncio.to_thread(
+                collect_dom_elements, self._driver
             )
+            selectors = await self._ai.identify_elements(elements)
 
             if not selectors:
-                result["reason"] = (
-                    "AI could not identify page elements"
-                )
+                result["reason"] = "AI could not identify page elements"
                 return result
 
             filled = await asyncio.to_thread(
                 self._fill_and_submit, selectors, username, password
             )
             if not filled:
-                result["reason"] = (
-                    "Failed to fill or submit login form"
-                )
+                result["reason"] = "Failed to fill or submit login form"
                 return result
 
             await asyncio.to_thread(self._driver.implicitly_wait, 3)
@@ -144,12 +130,8 @@ class BrowserAgent:
             )
             if is_captcha:
                 self._state = TaskState.WAITING_FOR_MANUAL_ACTION
-                result["state"] = (
-                    TaskState.WAITING_FOR_MANUAL_ACTION
-                )
-                result["reason"] = (
-                    "CAPTCHA after login attempt"
-                )
+                result["state"] = TaskState.WAITING_FOR_MANUAL_ACTION
+                result["reason"] = "CAPTCHA after login attempt"
                 return result
 
             login_ok = await asyncio.to_thread(
@@ -165,9 +147,7 @@ class BrowserAgent:
                 result["state"] = TaskState.FAILURE
                 result["reason"] = "Login failed"
 
-        except (
-            OSError, WebDriverException, TimeoutException
-        ) as e:
+        except Exception as e:
             logger.error(
                 "Login execution failed: %s [%s]",
                 e, type(e).__name__,
@@ -175,20 +155,7 @@ class BrowserAgent:
             self._state = TaskState.FAILURE
             result["reason"] = f"{type(e).__name__}: {e}"
 
-        except Exception as e:
-            logger.error(
-                "Unexpected error in login: %s [%s]",
-                e, type(e).__name__,
-            )
-            self._state = TaskState.FAILURE
-            result["reason"] = f"{type(e).__name__}: {e}"
-
         return result
-
-    def _extract_elements(self) -> list:
-        raw = collect_dom_elements(self._driver)
-        from backend.models.schemas import DOMElement
-        return [DOMElement(**el) for el in raw]
 
     def _fill_and_submit(
         self,
@@ -196,13 +163,13 @@ class BrowserAgent:
         username: str,
         password: str,
     ) -> bool:
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support import (
-            expected_conditions as EC,
-        )
-        from selenium.webdriver.support.ui import WebDriverWait
-
         try:
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support import (
+                expected_conditions as EC,
+            )
+            from selenium.webdriver.support.ui import WebDriverWait
+
             wait = WebDriverWait(self._driver, 10)
 
             user_field = wait.until(
@@ -225,9 +192,7 @@ class BrowserAgent:
             submit_btn.click()
 
             return True
-        except (
-            OSError, WebDriverException, TimeoutException
-        ) as e:
+        except Exception as e:
             logger.error("Fill and submit failed: %s", e)
             return False
 
@@ -258,5 +223,6 @@ class BrowserAgent:
 
     def take_screenshot(self) -> bytes | None:
         if self._driver:
+            from backend.browser.driver import take_screenshot
             return take_screenshot(self._driver)
         return None

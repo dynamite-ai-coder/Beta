@@ -2,15 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-
-import undetected_chromedriver as uc
-from selenium.common.exceptions import (
-    TimeoutException,
-    WebDriverException,
-)
-from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webdriver import WebDriver
-from selenium.webdriver.support.ui import WebDriverWait
+from typing import Any
 
 from backend.config import settings
 
@@ -23,6 +15,32 @@ CHROMIUM_PATHS = [
     "/usr/bin/google-chrome-stable",
     "/snap/bin/chromium",
 ]
+
+_selenium_available = None
+_uc_available = None
+
+
+def _check_selenium() -> bool:
+    global _selenium_available
+    if _selenium_available is None:
+        try:
+            import selenium
+            _selenium_available = True
+        except ImportError:
+            _selenium_available = False
+            logger.warning("Selenium not available - browser automation disabled")
+    return _selenium_available
+
+
+def _check_uc() -> bool:
+    global _uc_available
+    if _uc_available is None:
+        try:
+            import undetected_chromedriver
+            _uc_available = True
+        except ImportError:
+            _uc_available = False
+    return _uc_available
 
 
 def find_browser_executable() -> str:
@@ -44,8 +62,16 @@ def find_browser_executable() -> str:
     raise RuntimeError("No Chromium/Chrome browser found.")
 
 
-def create_browser() -> WebDriver:
-    options = uc.ChromeOptions()
+def create_browser() -> Any:
+    if not _check_selenium():
+        raise RuntimeError(
+            "Selenium not installed. Install with: pip install selenium"
+        )
+
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+
+    options = Options()
 
     if settings.headless:
         options.add_argument("--headless=new")
@@ -57,9 +83,7 @@ def create_browser() -> WebDriver:
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-infobars")
     options.add_argument("--disable-browser-side-navigation")
-    options.add_argument(
-        "--disable-features=VizDisplayCompositor"
-    )
+    options.add_argument("--disable-features=VizDisplayCompositor")
     options.add_argument("--remote-debugging-port=0")
     options.add_argument("--user-data-dir=/tmp/chrome-profile")
     options.add_argument("--disable-blink-features=AutomationControlled")
@@ -68,7 +92,6 @@ def create_browser() -> WebDriver:
     options.add_argument("--disable-features=Translate")
     options.add_argument("--disable-background-networking")
     options.add_argument("--disable-default-apps")
-    options.add_argument("--disable-extensions")
     options.add_argument("--disable-sync")
     options.add_argument("--no-first-run")
     options.add_argument("--single-process")
@@ -80,27 +103,34 @@ def create_browser() -> WebDriver:
         "Chrome/131.0.0.0 Safari/537.36"
     )
 
-    browser_path = find_browser_executable()
-    options.binary_location = browser_path
+    try:
+        browser_path = find_browser_executable()
+        options.binary_location = browser_path
+    except RuntimeError as e:
+        logger.warning("Browser not found: %s", e)
 
     if settings.proxy_enabled and settings.proxy_url:
         options.add_argument(f"--proxy-server={settings.proxy_url}")
         logger.info("Proxy enabled: %s", settings.proxy_url[:60])
 
-    try:
-        driver = uc.Chrome(
-            options=options,
-            headless=settings.headless,
-            version_main=None,
-            use_subprocess=True,
-        )
-    except Exception as e:
-        logger.warning(
-            "undetected-chromedriver failed (%s), "
-            "falling back to standard Chrome", e
-        )
+    driver = None
+    if _check_uc():
+        try:
+            import undetected_chromedriver as uc
+            driver = uc.Chrome(
+                options=options,
+                headless=settings.headless,
+                version_main=None,
+                use_subprocess=True,
+            )
+        except Exception as e:
+            logger.warning(
+                "undetected-chromedriver failed (%s), "
+                "falling back to standard Chrome", e
+            )
+
+    if driver is None:
         from selenium import webdriver
-        from selenium.webdriver.chrome.service import Service
 
         driver_path = None
         for p in [
@@ -119,20 +149,23 @@ def create_browser() -> WebDriver:
             if driver_path
             else Service()
         )
-        driver = webdriver.Chrome(
-            service=service, options=options
-        )
+        driver = webdriver.Chrome(service=service, options=options)
 
     driver.set_page_load_timeout(30)
     driver.implicitly_wait(5)
 
-    logger.info("Browser started: %s", browser_path)
+    logger.info("Browser started")
     return driver
 
 
 def navigate_safe(
-    driver: WebDriver, url: str, timeout: int = 30
+    driver: Any, url: str, timeout: int = 30
 ) -> bool:
+    if not _check_selenium():
+        return False
+    from selenium.common.exceptions import WebDriverException, TimeoutException
+    from selenium.webdriver.support.ui import WebDriverWait
+
     try:
         driver.set_page_load_timeout(timeout)
         driver.get(url)
@@ -148,7 +181,7 @@ def navigate_safe(
         return False
 
 
-def take_screenshot(driver: WebDriver) -> bytes:
+def take_screenshot(driver: Any) -> bytes:
     return driver.get_screenshot_as_png()
 
 
@@ -245,8 +278,12 @@ return elements;
 
 
 def collect_dom_elements(
-    driver: WebDriver, max_elements: int = 80
+    driver: Any, max_elements: int = 80
 ) -> list[dict]:
+    if not _check_selenium():
+        return []
+    from selenium.common.exceptions import WebDriverException
+
     script = JS_COLLECT_DOM.replace("MAX", str(max_elements))
     try:
         result = driver.execute_script(script)
@@ -265,7 +302,12 @@ CAPTCHA_INDICATORS = [
 ]
 
 
-def detect_captcha(driver: WebDriver) -> bool:
+def detect_captcha(driver: Any) -> bool:
+    if not _check_selenium():
+        return False
+    from selenium.common.exceptions import WebDriverException
+    from selenium.webdriver.common.by import By
+
     try:
         page_source = driver.page_source.lower()
         for indicator in CAPTCHA_INDICATORS:
