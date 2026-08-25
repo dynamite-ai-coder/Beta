@@ -96,11 +96,17 @@ class BrowserAgent:
         }
 
         try:
-            if not navigate_safe(self._driver, target_url):
+            nav_ok = await asyncio.to_thread(
+                navigate_safe, self._driver, target_url
+            )
+            if not nav_ok:
                 result["reason"] = "Failed to navigate"
                 return result
 
-            if detect_captcha(self._driver):
+            is_captcha = await asyncio.to_thread(
+                detect_captcha, self._driver
+            )
+            if is_captcha:
                 self._state = TaskState.WAITING_FOR_MANUAL_ACTION
                 result["state"] = (
                     TaskState.WAITING_FOR_MANUAL_ACTION
@@ -110,7 +116,7 @@ class BrowserAgent:
                 )
                 return result
 
-            elements = self._extract_elements()
+            elements = await asyncio.to_thread(self._extract_elements)
             selectors = await self._ai.identify_elements(
                 elements
             )
@@ -121,8 +127,8 @@ class BrowserAgent:
                 )
                 return result
 
-            filled = await self._fill_and_submit(
-                selectors, username, password
+            filled = await asyncio.to_thread(
+                self._fill_and_submit, selectors, username, password
             )
             if not filled:
                 result["reason"] = (
@@ -130,10 +136,13 @@ class BrowserAgent:
                 )
                 return result
 
-            self._driver.implicitly_wait(3)
+            await asyncio.to_thread(self._driver.implicitly_wait, 3)
             await asyncio.sleep(2)
 
-            if detect_captcha(self._driver):
+            is_captcha = await asyncio.to_thread(
+                detect_captcha, self._driver
+            )
+            if is_captcha:
                 self._state = TaskState.WAITING_FOR_MANUAL_ACTION
                 result["state"] = (
                     TaskState.WAITING_FOR_MANUAL_ACTION
@@ -143,7 +152,10 @@ class BrowserAgent:
                 )
                 return result
 
-            if self._detect_login_success():
+            login_ok = await asyncio.to_thread(
+                self._detect_login_success
+            )
+            if login_ok:
                 self._state = TaskState.SUCCESS
                 result["state"] = TaskState.SUCCESS
                 result["result"] = "Login successful"
@@ -178,7 +190,7 @@ class BrowserAgent:
         from backend.models.schemas import DOMElement
         return [DOMElement(**el) for el in raw]
 
-    async def _fill_and_submit(
+    def _fill_and_submit(
         self,
         selectors: AISelectors,
         username: str,

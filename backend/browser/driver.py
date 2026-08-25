@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import signal
 
 import undetected_chromedriver as uc
 from selenium.common.exceptions import (
@@ -23,6 +24,19 @@ CHROMIUM_PATHS = [
     "/usr/bin/google-chrome-stable",
     "/snap/bin/chromium",
 ]
+
+CHROME_STARTUP_TIMEOUT = 45
+
+
+class ChromeStartupTimeout(Exception):
+    pass
+
+
+def _timeout_handler(signum, frame):
+    raise ChromeStartupTimeout(
+        "Chrome startup timed out after "
+        f"{CHROME_STARTUP_TIMEOUT}s"
+    )
 
 
 def find_browser_executable() -> str:
@@ -76,12 +90,24 @@ def create_browser() -> WebDriver:
         options.add_argument(f"--proxy-server={settings.proxy_url}")
         logger.info("Proxy enabled: %s", settings.proxy_url[:60])
 
+    old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+    signal.alarm(CHROME_STARTUP_TIMEOUT)
+
     try:
         driver = uc.Chrome(
             options=options,
             headless=settings.headless,
             version_main=None,
             use_subprocess=True,
+        )
+    except ChromeStartupTimeout:
+        logger.error(
+            "Chrome startup timed out after %ds",
+            CHROME_STARTUP_TIMEOUT,
+        )
+        raise RuntimeError(
+            f"Chrome startup timed out after "
+            f"{CHROME_STARTUP_TIMEOUT}s"
         )
     except Exception as e:
         logger.warning(
@@ -111,6 +137,9 @@ def create_browser() -> WebDriver:
         driver = webdriver.Chrome(
             service=service, options=options
         )
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
 
     driver.set_page_load_timeout(30)
     driver.implicitly_wait(5)

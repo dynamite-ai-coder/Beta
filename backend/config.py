@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     headless: bool = True
 
     # Proxy (Proxy-Cheap)
-    proxy_enabled: bool = True
+    proxy_enabled: bool = False
     proxy_secret: str = ""
     proxy_apikey: str = ""
     proxy_url: str = "http://01a03626-786e-79a1-9d39-8d77a7fcf978:01a03626-786e-79a1-9d39-8d77a8bb0953@proxy-us.proxy-cheap.com:5959"

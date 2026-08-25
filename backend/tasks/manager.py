@@ -101,7 +101,7 @@ class TaskManager:
 
         try:
             await self.update_task_state(task_id, TaskState.STARTING)
-            agent.start_browser()
+            await asyncio.to_thread(agent.start_browser)
             self._add_event(task_id, "browser_started")
 
             await self.update_task_state(task_id, TaskState.RUNNING)
@@ -123,7 +123,7 @@ class TaskManager:
             task["reason"] = result.get("reason")
 
             if final_state == TaskState.SUCCESS:
-                screenshot = agent.take_screenshot()
+                screenshot = await asyncio.to_thread(agent.take_screenshot)
                 if screenshot:
                     path = self._save_screenshot(
                         task_id, task["username"], screenshot
@@ -151,7 +151,7 @@ class TaskManager:
                 task_id, TaskState.FAILURE, f"{type(e).__name__}: {e}"
             )
         finally:
-            agent.close_browser()
+            await asyncio.to_thread(agent.close_browser)
             async with self._lock:
                 self._agents.pop(task_id, None)
 
@@ -171,7 +171,7 @@ class TaskManager:
     async def stop_task(self, task_id: str) -> bool:
         agent = self._agents.get(task_id)
         if agent:
-            agent.close_browser()
+            await asyncio.to_thread(agent.close_browser)
             await self.update_task_state(
                 task_id, TaskState.STOPPED, "Stopped by user"
             )
@@ -196,7 +196,7 @@ class TaskManager:
         for task_id in list(self._agents.keys()):
             agent = self._agents.get(task_id)
             if agent:
-                agent.close_browser()
+                await asyncio.to_thread(agent.close_browser)
         async with self._lock:
             self._agents.clear()
 
