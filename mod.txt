@@ -1,0 +1,933 @@
+
+
+You are working directly on the existing GitHub repository:
+
+https://github.com/dynamite-ai-coder/Beta
+
+Your task is to refactor the existing Beta project into a production-ready distributed architecture consisting of:
+
+1. A lightweight Render backend.
+2. Groq AI running exclusively through the Render backend.
+3. A Windows Browser Agent running locally on the user's Windows computer.
+4. Selenium + ChromeDriver + Chrome running ONLY on the Windows computer.
+
+IMPORTANT ARCHITECTURAL REQUIREMENT:
+
+Render must NOT run Chromium, ChromeDriver, Selenium, or any browser automation.
+
+The Windows client must run the browser locally.
+
+Termux/Android support is completely out of scope for this refactor. Focus only on Windows.
+
+There will always be exactly ONE browser session, ONE Chrome instance, and ONE active browser window on the Windows client.
+
+The main objective is to remove Chrome/Selenium memory usage from Render so the backend can comfortably operate within the 512 MB RAM limitation of the Render free instance.
+
+Do NOT blindly rewrite the project.
+
+First inspect the entire repository and understand the existing architecture, then modify it incrementally while preserving existing functionality wherever possible.
+
+==================================================
+PHASE 1 — ANALYZE THE EXISTING PROJECT
+==================================================
+
+Before changing code, inspect the complete Beta repository.
+
+Identify exactly:
+
+- FastAPI entrypoints
+- API routes
+- WebSocket implementation
+- Selenium usage
+- ChromeDriver initialization
+- Chromium startup/shutdown
+- undetected-chromedriver usage
+- browser session management
+- task management
+- task queue
+- scheduler
+- database models
+- Groq/AI integration
+- authentication
+- preview functionality
+- screenshots
+- browser streaming
+- frontend/client code
+- configuration
+- environment variables
+- Dockerfile
+- render.yaml
+- requirements.txt
+- tests
+
+Search the repository for:
+
+selenium
+webdriver
+webdriver.Chrome
+ChromeDriver
+undetected_chromedriver
+chromium
+chrome
+browser
+browser session
+WebSocket
+websocket
+Groq
+AI_API_KEY
+AI_MODEL
+AI_BASE_URL
+AI_PROVIDER
+TASK_TIMEOUT
+BROWSER_SESSION_TIMEOUT
+PREVIEW_ENABLED
+API_AUTH_TOKEN
+PROXY_ENABLED
+PROXY_APIKEY
+PROXY_SECRET
+PROXY_URL
+
+Do not start modifying files until you understand how the current browser automation, API, AI, and WebSocket components interact.
+
+==================================================
+TARGET ARCHITECTURE
+==================================================
+
+The final system must look conceptually like this:
+
+USER
+  |
+  v
+Windows Client / UI
+  |
+  | HTTPS / WSS
+  |
+  v
+RENDER BACKEND
+  |
+  +-- FastAPI
+  +-- REST API
+  +-- WebSocket server
+  +-- Authentication
+  +-- Client management
+  +-- Task manager
+  +-- Task queue
+  +-- Database
+  +-- Scheduler
+  +-- Groq client
+  +-- Business logic
+  |
+  +------ HTTPS ------> GROQ API
+
+
+WINDOWS BROWSER AGENT
+  |
+  +-- WebSocket client
+  +-- Authentication
+  +-- Task receiver
+  +-- Task executor
+  +-- Selenium
+  +-- ChromeDriver
+  +-- Chrome
+  |
+  v
+WEBSITES
+
+The Render backend communicates with Groq.
+
+The Render backend communicates with the Windows Browser Agent.
+
+The Windows Browser Agent communicates with Chrome through Selenium.
+
+The Windows Browser Agent does NOT communicate directly with Groq.
+
+==================================================
+WHAT MUST REMAIN ON RENDER
+==================================================
+
+Render must handle:
+
+- FastAPI
+- REST API
+- WebSocket server
+- authentication
+- client registration
+- client status
+- task creation
+- task queue
+- task assignment
+- task state
+- task timeout
+- task cancellation
+- task results
+- database
+- scheduler
+- business logic
+- AI/Groq communication
+- logging
+- monitoring
+- configuration
+- server-side secrets
+
+Render must NOT launch a browser.
+
+Render must NOT require Chromium.
+
+Render must NOT require ChromeDriver.
+
+Render must NOT require Selenium for browser execution.
+
+==================================================
+WHAT MUST MOVE TO WINDOWS
+==================================================
+
+Create a dedicated Windows Browser Agent.
+
+The client should contain the browser-related functionality.
+
+Suggested structure:
+
+client/
+    main.py
+    agent.py
+    websocket_client.py
+    browser.py
+    task_executor.py
+    auth.py
+    config.py
+    models.py
+    logging_config.py
+
+Adapt this structure to the existing project if another structure is cleaner.
+
+The Windows client must handle:
+
+- starting the application
+- authentication
+- connection to Render
+- WSS connection
+- reconnect logic
+- Selenium
+- ChromeDriver
+- Chrome
+- browser startup
+- browser shutdown
+- browser restart
+- browser navigation
+- clicking
+- typing
+- extraction
+- screenshots
+- browser events
+- task execution
+- task cleanup
+
+There must NEVER be more than one active browser session.
+
+Use a single browser instance and a single task worker/lock.
+
+==================================================
+BROWSER STARTUP
+==================================================
+
+When the Windows client starts:
+
+1. Start the client.
+2. Load configuration.
+3. Authenticate with Render.
+4. Establish WSS connection.
+5. Start Chrome.
+6. Start Selenium/ChromeDriver.
+7. Verify that Chrome is ready.
+8. Send BROWSER_READY to Render.
+9. Wait for tasks.
+
+The normal state should be:
+
+CLIENT ONLINE
++
+BROWSER READY
++
+WAITING FOR TASK
+
+==================================================
+BROWSER CRASH RECOVERY
+==================================================
+
+If Chrome or ChromeDriver crashes:
+
+1. Detect the failure.
+2. Report BROWSER_ERROR.
+3. Stop/kill the broken browser process.
+4. Clean up Selenium.
+5. Restart ChromeDriver.
+6. Restart Chrome.
+7. Verify the new session.
+8. Send BROWSER_READY again.
+
+Do not require the user to manually restart the client.
+
+==================================================
+WEBSOCKET COMMUNICATION
+==================================================
+
+Use secure WSS communication between the Windows client and Render.
+
+The Windows client should establish an outbound connection.
+
+Do NOT expose a Selenium server or Chrome debugging port directly to the Internet.
+
+Implement heartbeat/ping functionality.
+
+Implement automatic reconnect with exponential backoff.
+
+For example:
+
+DISCONNECTED
+    |
+    v
+retry after 1 second
+    |
+    v
+retry after 2 seconds
+    |
+    v
+retry after 5 seconds
+    |
+    v
+retry after 10 seconds
+    |
+    v
+CONNECTED
+
+After reconnecting, the client must synchronize its current state with Render.
+
+==================================================
+WEBSOCKET MESSAGE PROTOCOL
+==================================================
+
+Implement an explicit JSON protocol.
+
+Every message should contain at least:
+
+- protocol_version
+- type
+- timestamp
+
+Task-related messages should also contain task_id.
+
+Implement messages similar to:
+
+CLIENT_REGISTER
+CLIENT_REGISTERED
+CLIENT_READY
+BROWSER_STARTING
+BROWSER_READY
+BROWSER_ERROR
+BROWSER_RESTARTING
+BROWSER_STOPPED
+
+TASK_CREATED
+TASK_ASSIGNED
+TASK_STARTED
+TASK_PROGRESS
+TASK_RESULT
+TASK_ERROR
+TASK_TIMEOUT
+TASK_CANCEL
+
+CLIENT_HEARTBEAT
+SERVER_HEARTBEAT
+
+CLIENT_DISCONNECTED
+CLIENT_RECONNECTED
+
+Example task:
+
+{
+  "protocol_version": 1,
+  "type": "TASK_ASSIGNED",
+  "task_id": "abc123",
+  "payload": {
+    "actions": [...]
+  }
+}
+
+Example result:
+
+{
+  "protocol_version": 1,
+  "type": "TASK_RESULT",
+  "task_id": "abc123",
+  "status": "success",
+  "result": {...}
+}
+
+Errors should contain:
+
+- error code
+- message
+- task_id
+- timestamp
+
+==================================================
+TASK QUEUE
+==================================================
+
+Because there is exactly one browser, tasks must be executed sequentially.
+
+Use a queue:
+
+TASK 1
+TASK 2
+TASK 3
+   |
+   v
+QUEUE
+   |
+   v
+ONE BROWSER
+   |
+   v
+TASK RESULT
+
+Never execute two browser tasks simultaneously.
+
+Task states should include:
+
+QUEUED
+ASSIGNED
+RUNNING
+SUCCESS
+FAILED
+TIMEOUT
+CANCELLED
+
+The backend must never leave a task permanently stuck in RUNNING.
+
+==================================================
+TASK EXECUTION FLOW
+==================================================
+
+Example:
+
+User sends:
+
+"Open website X and find product Y."
+
+The flow should be:
+
+USER
+  |
+  v
+FastAPI
+  |
+  v
+Groq
+  |
+  v
+AI analyzes request
+  |
+  v
+Task Manager
+  |
+  v
+Task Queue
+  |
+  v
+Windows Browser Agent
+  |
+  v
+Selenium
+  |
+  v
+Chrome
+  |
+  v
+Website
+  |
+  v
+Result
+  |
+  v
+Windows Browser Agent
+  |
+  v
+Render
+  |
+  v
+Optional Groq analysis
+  |
+  v
+Final response
+
+Groq remains server-side.
+
+==================================================
+GROQ
+==================================================
+
+Keep the existing Groq integration on Render.
+
+The Groq API key must NEVER be sent to the Windows client.
+
+The Windows client must NOT contain:
+
+AI_API_KEY
+Groq API key
+Groq secret
+server-side credentials
+
+The Render backend should communicate with Groq.
+
+The client should only receive the task/instructions necessary to perform browser automation.
+
+If the result from Selenium needs to be interpreted by AI, send the result back to Render and let Render call Groq.
+
+==================================================
+AUTHENTICATION
+==================================================
+
+Implement secure authentication between Windows Client and Render.
+
+The client must identify itself using a client ID and secure credential/token.
+
+The backend should be able to track:
+
+- client_id
+- status
+- last_seen
+- browser_status
+- current_task
+- connection status
+
+Do not expose Selenium or Chrome to the public Internet.
+
+The client connects OUTBOUND to Render.
+
+Never hardcode secrets.
+
+Audit the repository for any existing credentials, especially render.yaml.
+
+If real credentials are present in repository files, move them to secure environment variables/secrets and remove them from tracked source files.
+
+Never commit real credentials.
+
+==================================================
+DATABASE
+==================================================
+
+Preserve the existing database architecture if possible.
+
+SQLite can remain the initial database unless the existing implementation requires otherwise.
+
+Store:
+
+CLIENTS
+
+- client_id
+- credential/token hash
+- status
+- last_seen
+- browser_status
+- created_at
+
+TASKS
+
+- task_id
+- client_id
+- status
+- created_at
+- started_at
+- finished_at
+- timeout
+- result
+- error
+
+Store task state and events as needed.
+
+Do not unnecessarily store large screenshots in SQLite.
+
+==================================================
+SCREENSHOTS AND PREVIEW
+==================================================
+
+Inspect the existing preview functionality before changing it.
+
+Do not continuously stream large browser video through Render unless absolutely necessary.
+
+Prefer:
+
+- screenshots on demand
+- compressed screenshots
+- task progress events
+- browser state events
+
+If the existing system requires screenshots, the Windows client should capture them and send them to Render only when necessary.
+
+Keep bandwidth and memory usage under control.
+
+==================================================
+TIMEOUTS
+==================================================
+
+Preserve the existing task timeout concept.
+
+Use the existing TASK_TIMEOUT and BROWSER_SESSION_TIMEOUT configuration where appropriate.
+
+If a task exceeds its timeout:
+
+TASK RUNNING
+    |
+    v
+TIMEOUT
+    |
+    v
+CANCEL TASK
+    |
+    v
+CLEAN BROWSER STATE
+    |
+    v
+READY FOR NEXT TASK
+
+A timed-out task must not block the single browser forever.
+
+==================================================
+RENDER MEMORY OPTIMIZATION
+==================================================
+
+This is one of the most important requirements.
+
+The Render backend must be lightweight enough to operate reliably within the 512 MB RAM free instance.
+
+Remove browser-related packages and OS dependencies from the Render container.
+
+The backend Dockerfile must NOT install Chromium or ChromeDriver.
+
+Remove unnecessary:
+
+- Chromium packages
+- Chrome libraries
+- ChromeDriver
+- Selenium
+- undetected-chromedriver
+
+from the server if they are no longer required by any backend code.
+
+Do not leave unnecessary browser dependencies in requirements.txt.
+
+If appropriate, create:
+
+requirements.txt
+
+for backend dependencies
+
+and:
+
+client-requirements.txt
+
+for Windows dependencies.
+
+The backend should contain only what it actually needs.
+
+==================================================
+DOCKERFILE
+==================================================
+
+Modify Dockerfile so that it creates a lightweight backend-only image.
+
+Keep the dependencies required by:
+
+- FastAPI
+- Uvicorn
+- HTTPX
+- WebSockets
+- SQLAlchemy
+- SQLite/aiosqlite
+- scheduler
+- Groq/API integration
+- existing business logic
+
+Remove browser dependencies.
+
+The backend must start successfully without Chrome installed.
+
+==================================================
+RENDER CONFIGURATION
+==================================================
+
+Update render.yaml as necessary.
+
+Preserve the existing service behavior where possible.
+
+Keep:
+
+- health check
+- start command
+- environment variables
+- port configuration
+
+Remove anything that is only necessary for server-side Chrome.
+
+Do not expose browser ports.
+
+==================================================
+ENVIRONMENT VARIABLES
+==================================================
+
+Separate backend and Windows configuration.
+
+Backend may contain:
+
+AI_API_KEY
+AI_MODEL
+AI_BASE_URL
+AI_PROVIDER
+DATABASE_URL
+API_AUTH_TOKEN
+PREVIEW_ENABLED
+PREVIEW_TOKEN_SECRET
+RATE_LIMIT_PER_MINUTE
+TASK_TIMEOUT
+BROWSER_SESSION_TIMEOUT
+DEBUG
+
+Windows client may contain:
+
+BACKEND_URL
+WS_URL
+CLIENT_ID
+CLIENT_TOKEN
+BROWSER_HEADLESS
+BROWSER_PROFILE_PATH
+LOG_LEVEL
+
+Never put the Groq API key in the Windows client.
+
+==================================================
+API
+==================================================
+
+Preserve existing endpoints whenever possible.
+
+Add endpoints only when necessary.
+
+Potential endpoints:
+
+POST /api/clients/register
+GET /api/clients/status
+POST /api/tasks
+GET /api/tasks/{task_id}
+POST /api/tasks/{task_id}/cancel
+GET /health
+
+WebSocket:
+
+/ws/client
+
+Reuse existing API abstractions instead of creating duplicate systems.
+
+==================================================
+ERROR HANDLING
+==================================================
+
+Correctly handle:
+
+- Render restart
+- WebSocket disconnect
+- Windows Internet loss
+- Chrome crash
+- ChromeDriver crash
+- Selenium exceptions
+- task timeout
+- task cancellation
+- invalid task
+- authentication failure
+- Groq API failure
+- backend unavailable
+- client unavailable
+
+Implement recovery wherever safe.
+
+Never leave the system permanently stuck because of a temporary browser or network failure.
+
+==================================================
+LOGGING
+==================================================
+
+Implement clear structured logging.
+
+Logs should allow correlation using:
+
+- client_id
+- task_id
+- session_id
+- event type
+
+Never log:
+
+- Groq API key
+- client tokens
+- proxy secrets
+- passwords
+- cookies
+
+==================================================
+PROJECT STRUCTURE
+==================================================
+
+Use the existing project structure where possible.
+
+A possible final structure is:
+
+Beta/
+
+backend/
+    main.py
+    api/
+    services/
+    models/
+    db/
+    websocket/
+    ai/
+    ...
+
+client/
+    main.py
+    agent.py
+    browser.py
+    task_executor.py
+    websocket_client.py
+    auth.py
+    config.py
+    ...
+
+requirements.txt
+client-requirements.txt
+Dockerfile
+render.yaml
+tests/
+
+Do NOT force this exact structure if the existing repository has a better organization.
+
+==================================================
+TESTING
+==================================================
+
+After implementation, test:
+
+1. Backend startup without Chrome.
+2. Backend health endpoint.
+3. Client authentication.
+4. WSS connection.
+5. Client registration.
+6. Browser startup.
+7. BROWSER_READY event.
+8. Task creation.
+9. Task assignment.
+10. Task execution.
+11. Task result.
+12. Task timeout.
+13. Task cancellation.
+14. WebSocket reconnect.
+15. Chrome crash recovery.
+16. Client restart.
+17. Render restart.
+18. Groq request.
+19. Error handling.
+20. Single-browser enforcement.
+
+Do not claim a test passed unless you actually ran it.
+
+==================================================
+IMPORTANT IMPLEMENTATION RULE
+==================================================
+
+Do NOT perform a blind full rewrite.
+
+Work incrementally.
+
+First understand the current architecture.
+
+Then isolate browser automation.
+
+Then create the Windows Browser Agent.
+
+Then implement backend/client communication.
+
+Then remove Selenium/Chrome from Render.
+
+Then optimize dependencies.
+
+Then test the entire flow.
+
+Preserve existing functionality whenever possible.
+
+Do not introduce unnecessary frameworks.
+
+Use the existing FastAPI/Python architecture.
+
+==================================================
+FINAL EXPECTED RESULT
+==================================================
+
+The final system must behave like this:
+
+1. User starts the Windows Beta Client.
+2. Client starts.
+3. Client connects securely to Render.
+4. Client authenticates.
+5. Client starts exactly one Chrome/Selenium session.
+6. Client reports BROWSER_READY.
+7. User sends a task.
+8. Render receives the task.
+9. Render uses Groq when AI reasoning is required.
+10. Render creates an executable browser task.
+11. Render sends the task to the Windows client.
+12. Windows client executes it using Selenium and Chrome.
+13. Windows client sends progress/results to Render.
+14. Render stores the result.
+15. Render may send the result to Groq for interpretation.
+16. Final result is returned to the user.
+17. Browser remains available for the next task.
+18. Only one task can execute at a time.
+19. If Chrome crashes, the Windows client restarts it.
+20. If WebSocket disconnects, the Windows client reconnects automatically.
+21. If Render restarts, the client reconnects automatically.
+22. Render never runs Chrome.
+23. Groq API key never leaves Render.
+24. Render uses significantly less RAM than the current architecture.
+
+==================================================
+FINAL REPORT
+==================================================
+
+After completing the work, provide a technical report containing:
+
+A. Files analyzed
+B. Files added
+C. Files modified
+D. Browser code moved to Windows
+E. Backend architecture
+F. Windows client architecture
+G. WebSocket protocol
+H. Authentication mechanism
+I. Groq flow
+J. Task queue logic
+K. Browser lifecycle
+L. Crash recovery
+M. Reconnect behavior
+N. Timeout/cancellation behavior
+O. Docker changes
+P. Render changes
+Q. Dependency changes
+R. Tests actually executed
+S. Any remaining problems
+T. Exact commands required to run the backend
+U. Exact commands required to run the Windows client
+V. How to package the Windows client into an executable if applicable
+
+Start by inspecting the repository thoroughly.
+Do not modify anything until you understand the current architecture.
+Then implement the refactor incrementally and test every major stage.
