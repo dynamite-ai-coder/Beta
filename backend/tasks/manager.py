@@ -6,6 +6,8 @@ import logging
 import os
 from datetime import datetime, timezone
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.config import settings
 from backend.models.schemas import TaskState
 from backend.tasks.repository import TaskRepository
@@ -20,11 +22,11 @@ class TaskManager:
         self._pending_results: dict[str, asyncio.Future] = {}
         self._lock = asyncio.Lock()
 
-    async def _get_repo(self) -> TaskRepository | None:
+    async def _get_repo(self) -> tuple[TaskRepository, AsyncSession] | None:
         try:
             from backend.database import async_session
             session = async_session()
-            return TaskRepository(session)
+            return TaskRepository(session), session
         except Exception as e:
             logger.error("Failed to create DB session: %s", e)
             return None
@@ -57,8 +59,9 @@ class TaskManager:
             self._tasks[task_id] = task
             self._events[task_id] = []
 
-        repo = await self._get_repo()
-        if repo:
+        result = await self._get_repo()
+        if result:
+            repo, session = result
             try:
                 await repo.create_task(
                     task_id=task_id,
@@ -70,6 +73,8 @@ class TaskManager:
                 await repo.add_event(task_id, "created")
             except Exception as e:
                 logger.error("Failed to persist task to DB: %s", e)
+            finally:
+                await session.close()
 
         return task
 
@@ -99,8 +104,9 @@ class TaskManager:
                     self._tasks[task_id]["reason"] = reason
                 self._add_event(task_id, "state_change", state.value)
 
-        repo = await self._get_repo()
-        if repo:
+        result = await self._get_repo()
+        if result:
+            repo, session = result
             try:
                 await repo.update_task_state(
                     task_id, state.value, reason=reason
@@ -108,6 +114,8 @@ class TaskManager:
                 await repo.add_event(task_id, "state_change", state.value)
             except Exception as e:
                 logger.error("Failed to persist state change to DB: %s", e)
+            finally:
+                await session.close()
 
     def _add_event(self, task_id: str, event: str, data: str | None = None) -> None:
         if task_id in self._events:
