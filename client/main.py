@@ -47,6 +47,14 @@ async def main() -> None:
     logger.info(f"Starting Beta Client: {config.client_id}")
     logger.info(f"Backend: {config.backend_url}")
 
+    from client.plugins.manager import plugin_manager
+    await plugin_manager.load_builtin(config)
+    logger.info(f"Plugins loaded: {len(plugin_manager.plugins)}")
+
+    from client.local_ai import detect_environment
+    env = detect_environment()
+    logger.info(f"Environment: {env['platform']} | RAM: {env['ram_mb']}MB | Model: {env['recommended_model']}")
+
     chat_client = ChatClient(config)
     file_manager = FileManager(config)
 

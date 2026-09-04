@@ -278,6 +278,28 @@ class LocalUI:
                 },
             )
 
+        @app.get("/api/plugins")
+        async def list_plugins():
+            from client.plugins.manager import plugin_manager
+            return {"plugins": plugin_manager.list_all()}
+
+        @app.post("/api/plugins/execute")
+        async def execute_plugin(request: Request):
+            body = await request.json()
+            name = body.get("name", "")
+            action = body.get("action", "")
+            params = body.get("params", {})
+            if not name:
+                return JSONResponse(status_code=400, content={"error": "Plugin name required"})
+            from client.plugins.manager import plugin_manager
+            result = await plugin_manager.execute(name, action=action, **params)
+            return result
+
+        @app.get("/api/localai/status")
+        async def local_ai_status():
+            from client.local_ai import get_status
+            return get_status()
+
         @app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
             await websocket.accept()

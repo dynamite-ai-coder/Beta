@@ -21,6 +21,7 @@ class TaskManager:
         self._events: dict[str, list[dict]] = {}
         self._lock = asyncio.Lock()
         self._browser = None
+        self._tor_browsers: dict[str, Any] = {}
 
     async def _get_repo(self) -> tuple[TaskRepository, AsyncSession] | None:
         try:
@@ -48,6 +49,7 @@ class TaskManager:
         username: str,
         password: str,
         instruction: str,
+        use_tor: bool = False,
     ) -> dict:
         now = datetime.now(timezone.utc)
         task = {
@@ -57,6 +59,7 @@ class TaskManager:
             "username": username,
             "password": password,
             "instruction": instruction,
+            "use_tor": use_tor,
             "created_at": now,
             "updated_at": now,
             "result": None,
@@ -142,10 +145,19 @@ class TaskManager:
         await self.update_task_state(task_id, TaskState.STARTING)
         self._add_event(task_id, "browser_starting")
 
+        use_tor = task.get("use_tor", False)
+        driver = None
+
         try:
-            await asyncio.to_thread(self._ensure_browser)
-            browser = self._get_browser()
-            if not browser:
+            if use_tor:
+                self._add_event(task_id, "tor_mode", "routing through Tor")
+                await asyncio.to_thread(self._ensure_tor_running)
+                driver = await asyncio.to_thread(self._create_tor_browser)
+            else:
+                await asyncio.to_thread(self._ensure_browser)
+                driver = self._get_browser()
+
+            if not driver:
                 await self.update_task_state(
                     task_id, TaskState.FAILURE, "Failed to start browser"
                 )
@@ -155,19 +167,19 @@ class TaskManager:
             self._add_event(task_id, "navigating", task["target_url"])
 
             await asyncio.to_thread(
-                self._navigate_with_retry, browser, task["target_url"]
+                self._navigate_with_retry, driver, task["target_url"]
             )
 
             import time
             time.sleep(2)
 
-            await asyncio.to_thread(self._fill_and_submit, browser, task)
+            await asyncio.to_thread(self._fill_and_submit, driver, task)
 
             import time
             time.sleep(3)
 
             screenshot = await asyncio.to_thread(
-                browser.get_screenshot_as_png
+                driver.get_screenshot_as_png
             )
             img_dir = settings.img_dir
             os.makedirs(img_dir, exist_ok=True)
@@ -176,8 +188,8 @@ class TaskManager:
                 f.write(screenshot)
             task["screenshot_path"] = screenshot_path
 
-            current_url = browser.current_url
-            page_source = browser.page_source
+            current_url = driver.current_url
+            page_source = driver.page_source
 
             has_captcha = await asyncio.to_thread(
                 self._detect_captcha, page_source
@@ -206,6 +218,12 @@ class TaskManager:
             )
             self._add_event(task_id, "error", str(e))
         finally:
+            if use_tor and driver:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+                self._tor_browsers.pop(task_id, None)
             self.save_result(task_id)
 
     def _ensure_browser(self) -> None:

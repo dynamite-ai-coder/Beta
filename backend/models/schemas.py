@@ -25,6 +25,7 @@ class TaskRequest(BaseModel):
         default="Log in with the provided credentials",
         max_length=4096,
     )
+    use_tor: bool = Field(default=False, description="Route browser through Tor network")
 
     @field_validator("target_url")
     @classmethod

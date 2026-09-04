@@ -101,7 +101,7 @@ Object.getOwnPropertyDescriptor = function(obj, prop) {
 """
 
 
-def create_browser() -> Any:
+def create_browser(proxy_url: str | None = None) -> Any:
     if not _check_selenium():
         raise RuntimeError(
             "Selenium not installed. Install with: pip install selenium"
@@ -161,9 +161,12 @@ def create_browser() -> Any:
     except RuntimeError as e:
         logger.warning("Browser not found: %s", e)
 
-    if settings.proxy_enabled and settings.proxy_url:
-        options.add_argument(f"--proxy-server={settings.proxy_url}")
-        logger.info("Proxy enabled")
+    effective_proxy = proxy_url
+    if not effective_proxy and settings.proxy_enabled and settings.proxy_url:
+        effective_proxy = settings.proxy_url
+    if effective_proxy:
+        options.add_argument(f"--proxy-server={effective_proxy}")
+        logger.info("Proxy enabled: %s", effective_proxy.split("@")[-1] if "@" in effective_proxy else effective_proxy)
 
     driver = None
     if _check_uc():
@@ -381,3 +384,9 @@ def detect_captcha(driver: Any) -> bool:
     except (WebDriverException, AttributeError) as e:
         logger.debug("CAPTCHA detection error: %s", e)
     return False
+
+
+def create_tor_browser() -> Any:
+    """Create a Chromium instance routed through Tor SOCKS5 proxy."""
+    tor_proxy = f"socks5://127.0.0.1:{settings.tor_socks_port}"
+    return create_browser(proxy_url=tor_proxy)

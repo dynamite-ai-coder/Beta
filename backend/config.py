@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     proxy_apikey: str = ""
     proxy_url: str = ""
 
+    # Tor (optional anonymity layer)
+    use_tor: bool = False
+    tor_bridges: str = ""
+    tor_socks_port: int = 9050
+
     # Preview
     preview_enabled: bool = True
     preview_token_secret: str = "change-me-in-production"
