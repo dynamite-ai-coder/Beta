@@ -103,6 +103,10 @@ def check_rate_limit(client_ip: str) -> bool:
     return True
 
 
+def reset_rate_limits() -> None:
+    _rate_limits.clear()
+
+
 async def rate_limit_middleware(
     request: Request, call_next
 ):

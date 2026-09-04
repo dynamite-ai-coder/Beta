@@ -15,8 +15,8 @@ from backend.config import settings
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
-BASE_DELAY = 1.0
-MAX_DELAY = 30.0
+BASE_DELAY = 2.0
+MAX_DELAY = 60.0
 
 
 class GroqAgentProvider:
@@ -29,7 +29,7 @@ class GroqAgentProvider:
         self.base_url = cfg["base_url"].rstrip("/")
         self.system_prompt = AGENT_SYSTEM_PROMPTS.get(agent_role, "")
         self._last_request_time = 0.0
-        self._min_request_interval = 0.1
+        self._min_request_interval = 2.5
 
     async def chat(self, user_message: str, context_summary: str = "") -> AgentOutput:
         start = time.monotonic()

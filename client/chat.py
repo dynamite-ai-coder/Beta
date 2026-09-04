@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Optional
 
 import httpx
 
@@ -14,25 +14,26 @@ logger = logging.getLogger(__name__)
 class ChatClient:
     def __init__(self, config: ClientConfig) -> None:
         self._config = config
+        self._session_id: Optional[str] = None
         self._history: list[dict[str, str]] = []
-        self._max_history = 50
 
     @property
     def history(self) -> list[dict[str, str]]:
         return list(self._history)
 
+    @property
+    def session_id(self) -> Optional[str]:
+        return self._session_id
+
     def add_user_message(self, content: str) -> None:
         self._history.append({"role": "user", "content": content})
-        if len(self._history) > self._max_history:
-            self._history = self._history[-self._max_history:]
 
     def add_assistant_message(self, content: str) -> None:
         self._history.append({"role": "assistant", "content": content})
-        if len(self._history) > self._max_history:
-            self._history = self._history[-self._max_history:]
 
     def clear_history(self) -> None:
         self._history.clear()
+        self._session_id = None
 
     async def send_message(
         self,
@@ -41,34 +42,27 @@ class ChatClient:
     ) -> str:
         self.add_user_message(message)
 
-        messages = list(self._history)
-        if file_context:
-            messages.insert(-1, {
-                "role": "system",
-                "content": f"Attached file content:\n{file_context[:8000]}",
-            })
-
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self._config.api_token:
             headers["Authorization"] = f"Bearer {self._config.api_token}"
 
         payload = {
-            "model": "beta-virtual-ai",
-            "messages": messages,
-            "temperature": 0.7,
-            "max_tokens": 4096,
+            "message": message,
+            "session_id": self._session_id or "",
+            "file_context": file_context,
         }
 
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:
                 resp = await client.post(
-                    f"{self._config.backend_url}/v1/chat/completions",
+                    f"{self._config.backend_url}/v1/chat/send",
                     headers=headers,
                     json=payload,
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                content = data["choices"][0]["message"]["content"]
+                content = data["response"]
+                self._session_id = data.get("session_id", self._session_id)
                 self.add_assistant_message(content)
                 return content
         except httpx.TimeoutException:

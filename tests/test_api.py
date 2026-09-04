@@ -11,6 +11,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.config import settings
 from backend.main import app
+from backend.security.auth import reset_rate_limits
+
+
+@pytest.fixture(autouse=True)
+def clear_rate_limits():
+    reset_rate_limits()
+    yield
+    reset_rate_limits()
 
 
 @pytest.fixture

@@ -5,16 +5,13 @@ import logging
 import signal
 import sys
 import threading
-from urllib.parse import urlparse
 
 import uvicorn
 
 from client.config import ClientConfig
-from client.ui import print_header, print_status, print_error
-from client.websocket_client import WebSocketClient
+from client.ui import print_header, print_status
 from client.chat import ChatClient
 from client.files.manager import FileManager
-from client.browser_preview import BrowserPreview
 from client.ui.app import LocalUI
 
 logging.basicConfig(
@@ -46,34 +43,25 @@ async def main() -> None:
     config = ClientConfig.from_env()
     logging.getLogger().setLevel(getattr(logging, config.log_level, logging.INFO))
 
+    print_header()
     logger.info(f"Starting Beta Client: {config.client_id}")
     logger.info(f"Backend: {config.backend_url}")
 
     chat_client = ChatClient(config)
     file_manager = FileManager(config)
-    browser_preview = BrowserPreview(config)
 
     local_ui = LocalUI(config, chat_client, file_manager)
     _start_local_ui(local_ui, config.local_ui_host, config.local_ui_port)
 
     print_status(f"Local Web UI: http://{config.local_ui_host}:{config.local_ui_port}")
-
-    client = WebSocketClient(config, on_task=lambda m: None)
-
-    loop = asyncio.get_event_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(sig, lambda: asyncio.create_task(client.disconnect()))
-        except NotImplementedError:
-            pass
+    print_status("Client is ready. Open the URL above in your browser.")
+    print_status("Press Ctrl+C to stop.")
 
     try:
-        await client.connect()
-    except KeyboardInterrupt:
+        while True:
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("Shutting down...")
-    finally:
-        await client.disconnect()
-        logger.info("Client stopped")
 
 
 def run() -> None:

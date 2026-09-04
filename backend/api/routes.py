@@ -35,6 +35,7 @@ from backend.services.ws_protocol import (
     msg_browser_ready, msg_browser_error, msg_task_result,
     msg_task_error, msg_task_cancel, msg_heartbeat,
 )
+from backend.services.chat_history import chat_history
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -426,6 +427,139 @@ async def list_models():
             }
         ],
     }
+
+
+@ai_router.get("/browser/screenshot/{task_id}")
+async def get_browser_screenshot(
+    request: Request, task_id: str
+):
+    if not _verify_beta_api_key(request):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    tm = _get_task_manager(request)
+    task = tm.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    screenshot_path = task.get("screenshot_path")
+    if not screenshot_path or not os.path.exists(screenshot_path):
+        return {"screenshot": None}
+
+    import base64
+    with open(screenshot_path, "rb") as f:
+        screenshot_b64 = base64.b64encode(f.read()).decode()
+
+    return {"screenshot": screenshot_b64}
+
+
+@ai_router.get("/browser/status")
+async def get_browser_status(request: Request):
+    if not _verify_beta_api_key(request):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    tm = _get_task_manager(request)
+    browser_running = tm._browser is not None and tm._browser.service.process is not None if tm._browser else False
+    return {
+        "browser_running": browser_running,
+        "engine": settings.browser_engine,
+    }
+
+
+@ai_router.post("/browser/navigate")
+async def browser_navigate(request: Request):
+    if not _verify_beta_api_key(request):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    body = await request.json()
+    url = body.get("url", "")
+    if not url:
+        raise HTTPException(status_code=400, detail="URL required")
+
+    tm = _get_task_manager(request)
+    try:
+        tm._ensure_browser()
+        from backend.browser.driver import navigate_safe
+        result = await asyncio.to_thread(navigate_safe, tm._browser, url)
+        return {"status": "ok" if result else "failed"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# CHAT HISTORY
+# ============================================================
+
+
+@ai_router.get("/chat/sessions")
+async def list_chat_sessions(request: Request):
+    if not _verify_beta_api_key(request):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return {"sessions": chat_history.list_sessions()}
+
+
+@ai_router.get("/chat/sessions/{session_id}")
+async def get_chat_session(request: Request, session_id: str):
+    if not _verify_beta_api_key(request):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    messages = chat_history.get_session_messages(session_id)
+    return {
+        "session_id": session_id,
+        "messages": [m.model_dump() for m in messages],
+    }
+
+
+@ai_router.post("/chat/sessions/{session_id}/clear")
+async def clear_chat_session(request: Request, session_id: str):
+    if not _verify_beta_api_key(request):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    chat_history.clear_session(session_id)
+    return {"status": "cleared"}
+
+
+@ai_router.delete("/chat/sessions/{session_id}")
+async def delete_chat_session(request: Request, session_id: str):
+    if not _verify_beta_api_key(request):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    chat_history.delete_session(session_id)
+    return {"status": "deleted"}
+
+
+@ai_router.post("/chat/send")
+async def chat_send(request: Request):
+    if not _verify_beta_api_key(request):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    body = await request.json()
+    message = body.get("message", "").strip()
+    session_id = body.get("session_id", "")
+    file_context = body.get("file_context", "")
+
+    if not message:
+        raise HTTPException(status_code=400, detail="Empty message")
+
+    session = chat_history.get_or_create_session(session_id)
+    chat_history.add_message(session.session_id, "user", message)
+
+    messages = [{"role": m.role, "content": m.content} for m in session.messages]
+    if file_context:
+        messages.insert(-1, {"role": "system", "content": f"Attached file:\n{file_context[:8000]}"})
+
+    try:
+        ai_req = VirtualAIRequest(
+            model=settings.virtual_model_name,
+            messages=messages,
+        )
+        response = await orchestrator.process(ai_req)
+        assistant_msg = response.choices[0].message["content"]
+        chat_history.add_message(session.session_id, "assistant", assistant_msg)
+
+        return {
+            "response": assistant_msg,
+            "session_id": session.session_id,
+        }
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        raise HTTPException(status_code=500, detail="AI error")
 
 
 # ============================================================

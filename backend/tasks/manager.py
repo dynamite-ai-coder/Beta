@@ -19,8 +19,8 @@ class TaskManager:
     def __init__(self) -> None:
         self._tasks: dict[str, dict] = {}
         self._events: dict[str, list[dict]] = {}
-        self._pending_results: dict[str, asyncio.Future] = {}
         self._lock = asyncio.Lock()
+        self._browser = None
 
     async def _get_repo(self) -> tuple[TaskRepository, AsyncSession] | None:
         try:
@@ -30,6 +30,16 @@ class TaskManager:
         except Exception as e:
             logger.error("Failed to create DB session: %s", e)
             return None
+
+    def _get_browser(self):
+        if self._browser is None:
+            try:
+                from backend.browser.driver import create_browser
+                self._browser = create_browser()
+            except Exception as e:
+                logger.error("Failed to create browser: %s", e)
+                return None
+        return self._browser
 
     async def create_task(
         self,
@@ -53,7 +63,6 @@ class TaskManager:
             "reason": None,
             "screenshot_path": None,
             "preview_token": None,
-            "assigned_client": None,
         }
         async with self._lock:
             self._tasks[task_id] = task
@@ -125,111 +134,137 @@ class TaskManager:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
 
-    async def execute_task(self, task_id: str) -> None:
+    async def _execute_browser_task(self, task_id: str) -> None:
         task = self._get_task_internal(task_id)
         if not task:
             return
 
-        from backend.services.client_manager import client_manager
-        from backend.services.ws_protocol import msg_task_assigned
-
-        client_id = client_manager.get_ready_client()
-        if not client_id:
-            await self.update_task_state(
-                task_id, TaskState.FAILURE, "No browser client available"
-            )
-            self._add_event(task_id, "no_client")
-            return
-
-        assigned = await client_manager.assign_task(client_id, task_id)
-        if not assigned:
-            await self.update_task_state(
-                task_id, TaskState.FAILURE, "Failed to assign client"
-            )
-            return
-
-        task["assigned_client"] = client_id
         await self.update_task_state(task_id, TaskState.STARTING)
-        self._add_event(task_id, "assigned_to_client", client_id)
-
-        actions = [
-            {"action": "navigate", "url": task["target_url"]},
-            {"action": "type", "selector": "username", "value": task["username"]},
-            {"action": "type", "selector": "password", "value": task["password"]},
-            {"action": "click", "selector": "submit"},
-        ]
-
-        assign_msg = msg_task_assigned(
-            task_id=task_id,
-            actions=actions,
-            target_url=task["target_url"],
-            instruction=task["instruction"],
-        )
-
-        sent = await client_manager.send_to_client(client_id, assign_msg)
-        if not sent:
-            await self.update_task_state(
-                task_id, TaskState.FAILURE, "Failed to send task to client"
-            )
-            await client_manager.release_task(client_id, task_id)
-            return
-
-        await self.update_task_state(task_id, TaskState.RUNNING)
+        self._add_event(task_id, "browser_starting")
 
         try:
-            future: asyncio.Future = asyncio.get_event_loop().create_future()
-            async with self._lock:
-                self._pending_results[task_id] = future
+            await asyncio.to_thread(self._ensure_browser)
+            browser = self._get_browser()
+            if not browser:
+                await self.update_task_state(
+                    task_id, TaskState.FAILURE, "Failed to start browser"
+                )
+                return
 
-            result = await asyncio.wait_for(future, timeout=settings.task_timeout)
+            await self.update_task_state(task_id, TaskState.RUNNING)
+            self._add_event(task_id, "navigating", task["target_url"])
 
-            status = result.get("status", "success")
-            if status == "success":
-                final_state = TaskState.SUCCESS
-            elif status == "captcha":
-                final_state = TaskState.WAITING_FOR_MANUAL_ACTION
+            await asyncio.to_thread(
+                self._navigate_with_retry, browser, task["target_url"]
+            )
+
+            import time
+            time.sleep(2)
+
+            await asyncio.to_thread(self._fill_and_submit, browser, task)
+
+            import time
+            time.sleep(3)
+
+            screenshot = await asyncio.to_thread(
+                browser.get_screenshot_as_png
+            )
+            img_dir = settings.img_dir
+            os.makedirs(img_dir, exist_ok=True)
+            screenshot_path = os.path.join(img_dir, f"{task_id}.png")
+            with open(screenshot_path, "wb") as f:
+                f.write(screenshot)
+            task["screenshot_path"] = screenshot_path
+
+            current_url = browser.current_url
+            page_source = browser.page_source
+
+            has_captcha = await asyncio.to_thread(
+                self._detect_captcha, page_source
+            )
+
+            if has_captcha:
+                await self.update_task_state(
+                    task_id, TaskState.WAITING_FOR_MANUAL_ACTION,
+                    "CAPTCHA detected"
+                )
+                self._add_event(task_id, "captcha_detected")
             else:
-                final_state = TaskState.FAILURE
+                await self.update_task_state(task_id, TaskState.SUCCESS)
+                self._add_event(task_id, "task_completed", "success")
 
-            await self.update_task_state(
-                task_id, final_state, result.get("reason")
-            )
-            task["result"] = result.get("result")
-            task["reason"] = result.get("reason")
-            self._add_event(task_id, "task_completed", final_state.value)
-            self.save_result(task_id)
+            task["result"] = json.dumps({
+                "current_url": current_url,
+                "has_captcha": has_captcha,
+                "screenshot": screenshot_path,
+            })
 
-        except asyncio.TimeoutError:
-            await self.update_task_state(
-                task_id, TaskState.TIMEOUT, "Task timed out"
-            )
-            cancel_msg = {"type": "TASK_CANCEL", "task_id": task_id}
-            await client_manager.send_to_client(client_id, cancel_msg)
-            self._add_event(task_id, "timeout")
         except Exception as e:
-            logger.error("Task %s error: %s", task_id, e)
+            logger.error("Browser task %s error: %s", task_id, e)
             await self.update_task_state(
                 task_id, TaskState.FAILURE, str(e)
             )
+            self._add_event(task_id, "error", str(e))
         finally:
-            async with self._lock:
-                self._pending_results.pop(task_id, None)
-            await client_manager.release_task(client_id, task_id)
+            self.save_result(task_id)
 
-    async def complete_task_from_client(
-        self, task_id: str, status: str, result: dict
-    ) -> None:
-        future = self._pending_results.get(task_id)
-        if future and not future.done():
-            future.set_result({"status": status, **result})
+    def _ensure_browser(self) -> None:
+        if self._browser is None:
+            from backend.browser.driver import create_browser
+            self._browser = create_browser()
+
+    def _navigate_with_retry(self, driver, url: str) -> None:
+        from backend.browser.driver import navigate_safe
+        navigate_safe(driver, url, timeout=30)
+
+    def _fill_and_submit(self, driver, task: dict) -> None:
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+
+        username = task["username"]
+        password = task["password"]
+
+        try:
+            username_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((
+                    By.CSS_SELECTOR,
+                    'input[type="text"], input[type="email"], input[name="username"], input[name="email"], input[autocomplete="username"]'
+                ))
+            )
+            username_field.clear()
+            username_field.send_keys(username)
+
+            password_field = driver.find_element(
+                By.CSS_SELECTOR,
+                'input[type="password"]'
+            )
+            password_field.clear()
+            password_field.send_keys(password)
+
+            submit = driver.find_element(
+                By.CSS_SELECTOR,
+                'button[type="submit"], input[type="submit"], button[name="submit"]'
+            )
+            submit.click()
+        except Exception as e:
+            logger.warning("Auto-fill failed: %s", e)
+
+    def _detect_captcha(self, page_source: str) -> bool:
+        indicators = [
+            "captcha", "recaptcha", "hcaptcha", "cf-challenge",
+            "verify you are human", "unusual traffic", "access denied",
+            "security check", "cloudflare", "challenge-platform",
+        ]
+        source_lower = page_source.lower()
+        return any(ind in source_lower for ind in indicators)
+
+    async def execute_task(self, task_id: str) -> None:
+        asyncio.create_task(self._execute_browser_task(task_id))
 
     async def stop_task(self, task_id: str) -> bool:
         task = self._get_task_internal(task_id)
-        if task and task.get("assigned_client"):
-            from backend.services.client_manager import client_manager
-            from backend.services.ws_protocol import msg_task_cancel
-            client_id = task["assigned_client"]
-            await client_manager.send_to_client(client_id, msg_task_cancel(task_id))
+        if task:
             await self.update_task_state(task_id, TaskState.STOPPED, "Stopped by user")
             self._add_event(task_id, "task_stopped")
             self.save_result(task_id)
@@ -247,8 +282,12 @@ class TaskManager:
         return False
 
     async def cleanup_all(self) -> None:
-        async with self._lock:
-            self._pending_results.clear()
+        if self._browser:
+            try:
+                self._browser.quit()
+            except Exception:
+                pass
+            self._browser = None
 
     def save_result(self, task_id: str) -> None:
         task = self._get_task_internal(task_id)

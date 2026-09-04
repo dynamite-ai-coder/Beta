@@ -17,9 +17,9 @@
         .dot-red{background:var(--red)}
         .dot-yellow{background:var(--yellow)}
         .main{display:flex;flex:1;overflow:hidden}
-        .panel{display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--surface)}
+        .panel{display:flex;flex-direction:column;background:var(--surface)}
         .panel-header{padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px}
-        .preview-panel{width:55%;min-width:300px}
+        .preview-panel{width:55%;min-width:300px;border-right:1px solid var(--border)}
         .preview-content{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden}
         .preview-content img{max-width:100%;max-height:100%;border-radius:6px;border:1px solid var(--border)}
         .preview-placeholder{color:var(--text2);font-size:14px;text-align:center}
@@ -38,9 +38,6 @@
         .btn-primary:hover{opacity:.9}
         .btn-sm{padding:6px 10px;font-size:12px}
         .chat-actions{display:flex;gap:8px;margin-top:8px}
-        .nav-bar{padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
-        .nav-bar input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px}
-        .nav-bar input:focus{outline:none;border-color:var(--accent)}
         .file-upload{position:relative;overflow:hidden}
         .file-upload input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
         .upload-info{padding:8px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--text2);display:none}
@@ -53,20 +50,15 @@
     <div class="header">
         <h1>BETA BROWSER AI</h1>
         <div class="status-bar">
-            <span><span class="status-dot dot-red" id="browser-dot"></span>Browser</span>
+            <span><span class="status-dot dot-green" id="server-dot"></span>Server</span>
             <span><span class="status-dot dot-green" id="ai-dot"></span>AI</span>
-            <span><span class="status-dot dot-yellow" id="task-dot"></span>Task</span>
         </div>
     </div>
     <div class="main">
         <div class="panel preview-panel">
-            <div class="panel-header">Browser Preview</div>
-            <div class="nav-bar">
-                <input type="text" id="nav-url" placeholder="Enter URL and press Go">
-                <button class="btn btn-sm" onclick="navigate()">Go</button>
-            </div>
+            <div class="panel-header">Browser Preview (Server-side)</div>
             <div class="preview-content" id="preview">
-                <div class="preview-placeholder">Browser preview will appear here</div>
+                <div class="preview-placeholder">Browser screenshots will appear here when tasks run on the server</div>
             </div>
         </div>
         <div class="panel chat-panel">
@@ -88,28 +80,7 @@
     </div>
 </div>
 <script>
-let ws=null,fileContext='';
-function connect(){
-    ws=new WebSocket(`ws://${location.host}/ws`);
-    ws.onopen=()=>{document.getElementById('ai-dot').className='status-dot dot-green'};
-    ws.onclose=()=>{document.getElementById('ai-dot').className='status-dot dot-red';setTimeout(connect,3000)};
-    ws.onmessage=e=>{
-        const d=JSON.parse(e.data);
-        if(d.type==='chat_response')addMsg(d.response,'ai');
-        if(d.type==='pong'){}
-    };
-}
-connect();
-
-function addMsg(text,type){
-    const c=document.getElementById('chat-messages');
-    const d=document.createElement('div');
-    d.className=`msg msg-${type}`;
-    d.textContent=text;
-    c.appendChild(d);
-    c.scrollTop=c.scrollHeight;
-}
-
+let fileContext='';
 async function sendChat(){
     const inp=document.getElementById('chat-input');
     const msg=inp.value.trim();
@@ -123,6 +94,15 @@ async function sendChat(){
         if(r.ok){addMsg(d.response,'ai');fileContext=''}
         else addMsg('Error: '+(d.error||'Unknown'),'system');
     }catch(e){addMsg('Connection error','system')}
+}
+
+function addMsg(text,type){
+    const c=document.getElementById('chat-messages');
+    const d=document.createElement('div');
+    d.className=`msg msg-${type}`;
+    d.textContent=text;
+    c.appendChild(d);
+    c.scrollTop=c.scrollHeight;
 }
 
 async function clearChat(){
@@ -148,35 +128,6 @@ async function handleFile(input){
     }catch(e){addMsg('Upload failed','system')}
     input.value='';
 }
-
-async function navigate(){
-    const url=document.getElementById('nav-url').value.trim();
-    if(!url)return;
-    try{await fetch('/api/browser/navigate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url}))}catch(e){}
-}
-
-async function updatePreview(){
-    try{
-        const r=await fetch('/api/browser/screenshot');
-        const d=await r.json();
-        const el=document.getElementById('preview');
-        if(d.screenshot){
-            el.innerHTML=`<img src="data:image/jpeg;base64,${d.screenshot}" alt="Browser">`;
-            document.getElementById('browser-dot').className='status-dot dot-green';
-        }
-    }catch(e){}
-}
-
-async function updateStatus(){
-    try{
-        const r=await fetch('/api/status');
-        const d=await r.json();
-        document.getElementById('browser-dot').className=`status-dot ${d.browser_connected?'dot-green':'dot-red'}`;
-    }catch(e){}
-}
-
-setInterval(updatePreview,500);
-setInterval(updateStatus,5000);
 
 document.getElementById('chat-input').addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'});
 </script>
