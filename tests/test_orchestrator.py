@@ -184,3 +184,58 @@ class TestClientUI:
         assert info["name"] == "document.pdf"
         assert info["extension"] == ".pdf"
         assert info["type"] == "pdf"
+
+
+class TestLocalAI:
+    def test_local_ai_disabled_by_default(self):
+        from client.local_ai import get_status
+        status = get_status()
+        assert status["enabled"] is False
+        assert status["loaded"] is False
+
+    def test_simple_request_bypass(self):
+        from client.local_ai import preprocess_prompt
+        orig, ctx = preprocess_prompt("Hello world")
+        assert orig == "Hello world"
+        assert ctx == ""
+
+    def test_short_question_bypass(self):
+        from client.local_ai import preprocess_prompt
+        orig, ctx = preprocess_prompt("What time is it?")
+        assert orig == "What time is it?"
+        assert ctx == ""
+
+    def test_complex_request_detected(self):
+        from client.local_ai import _is_complex_request
+        assert _is_complex_request("Analyze this code and explain how it works")
+        assert _is_complex_request("Compare Python and JavaScript performance")
+        assert _is_complex_request("What are the differences? What should I choose?")
+        assert _is_complex_request("A" * 400)
+
+    def test_simple_request_not_complex(self):
+        from client.local_ai import _is_complex_request
+        assert not _is_complex_request("Hello")
+        assert not _is_complex_request("What time is it?")
+        assert not _is_complex_request("hi")
+
+    def test_file_context_makes_complex(self):
+        from client.local_ai import _is_complex_request
+        assert _is_complex_request("Analyze", "x" * 600)
+
+    def test_context_extraction(self):
+        from client.local_ai import _extract_context_summary
+        ctx = _extract_context_summary("test message", "line1\nline2\nline3")
+        assert "File context" in ctx or "Key points" in ctx
+
+    def test_is_available_false_without_model(self):
+        from client.local_ai import is_local_ai_available
+        assert is_local_ai_available() is False
+
+    def test_config_local_ai_settings(self):
+        from client.config import ClientConfig
+        config = ClientConfig()
+        assert config.local_ai_enabled is False
+        assert config.local_ai_model == ""
+        assert config.local_ai_context == 2048
+        assert config.local_ai_max_tokens == 256
+        assert config.local_ai_threads == 2

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Optional
 
 import httpx
 
 from client.config import ClientConfig
+from client.local_ai import preprocess_prompt_async, is_local_ai_available
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +42,23 @@ class ChatClient:
     ) -> str:
         self.add_user_message(message)
 
+        original, processed = await preprocess_prompt_async(message, file_context)
+
+        send_message = original
+        send_file_context = file_context
+        if processed:
+            send_message = f"[Preprocessed context from local AI]\n{processed}\n\n[Original user message]\n{original}"
+            if file_context:
+                send_file_context = ""
+
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self._config.api_token:
             headers["Authorization"] = f"Bearer {self._config.api_token}"
 
         payload = {
-            "message": message,
+            "message": send_message,
             "session_id": self._session_id or "",
-            "file_context": file_context,
+            "file_context": send_file_context,
         }
 
         try:

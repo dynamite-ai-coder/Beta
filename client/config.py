@@ -38,6 +38,13 @@ class ClientConfig:
     # API auth for backend
     api_token: str = ""
 
+    # Local AI (optional preprocessor)
+    local_ai_enabled: bool = False
+    local_ai_model: str = ""
+    local_ai_context: int = 2048
+    local_ai_max_tokens: int = 256
+    local_ai_threads: int = 2
+
     @classmethod
     def from_env(cls) -> ClientConfig:
         backend_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
@@ -60,4 +67,9 @@ class ClientConfig:
             browser_engine=os.environ.get("BROWSER_ENGINE", "selenium"),
             max_upload_size=int(os.environ.get("MAX_UPLOAD_SIZE", "10485760")),
             allowed_extensions=os.environ.get("ALLOWED_EXTENSIONS", "txt,pdf,docx,csv,json,png,jpg,jpeg"),
+            local_ai_enabled=os.environ.get("LOCAL_AI_ENABLED", "false").lower() == "true",
+            local_ai_model=os.environ.get("LOCAL_AI_MODEL", ""),
+            local_ai_context=int(os.environ.get("LOCAL_AI_CONTEXT", "2048")),
+            local_ai_max_tokens=int(os.environ.get("LOCAL_AI_MAX_TOKENS", "256")),
+            local_ai_threads=int(os.environ.get("LOCAL_AI_THREADS", "2")),
         )
