@@ -22,9 +22,15 @@ class Plugin(PluginBase):
 
     def __init__(self, config: Any = None) -> None:
         super().__init__(config)
-        self._api_key = os.environ.get("AI_API_KEY", "")
-        self._base_url = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1")
-        self._model = os.environ.get("AI_MODEL", "llama-3.3-70b-versatile")
+        self._groq_key = os.environ.get("AI_API_KEY", "")
+        self._groq_url = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1")
+        self._groq_model = os.environ.get("AI_MODEL", "llama-3.3-70b-versatile")
+        self._openai_key = os.environ.get("OPENAI_API_KEY", "")
+        self._openai_url = "https://api.openai.com/v1"
+        self._openai_model = "gpt-4o-mini"
+        self._api_key = self._groq_key or self._openai_key
+        self._base_url = self._groq_url if self._groq_key else self._openai_url
+        self._model = self._groq_model if self._groq_key else self._openai_model
 
     async def execute(self, action: str = "think", **kw: Any) -> dict[str, Any]:
         actions = {
@@ -43,22 +49,39 @@ class Plugin(PluginBase):
         return await fn(**kw)
 
     async def _call_llm(self, system: str, user: str, temperature: float = 0.7) -> str:
-        if not self._api_key:
-            return "Error: AI_API_KEY not configured"
+        providers = []
+        if self._groq_key:
+            providers.append(("groq", self._groq_url, self._groq_key, self._groq_model))
+        if self._openai_key:
+            providers.append(("openai", self._openai_url, self._openai_key, self._openai_model))
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            r = await client.post(
-                f"{self._base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
-                json={
-                    "model": self._model,
-                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                    "temperature": temperature,
-                    "max_tokens": 4096,
-                },
-            )
-            r.raise_for_status()
-            return r.json()["choices"][0]["message"]["content"]
+        if not providers:
+            return "Error: No API keys configured (set AI_API_KEY or OPENAI_API_KEY)"
+
+        last_error = ""
+        for name, base_url, api_key, model in providers:
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    r = await client.post(
+                        f"{base_url}/chat/completions",
+                        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                        json={
+                            "model": model,
+                            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                            "temperature": temperature,
+                            "max_tokens": 4096,
+                        },
+                    )
+                    r.raise_for_status()
+                    return r.json()["choices"][0]["message"]["content"]
+            except httpx.HTTPStatusError as e:
+                last_error = f"{name} API error {e.response.status_code}"
+                continue
+            except Exception as e:
+                last_error = f"{name} error: {str(e)[:100]}"
+                continue
+
+        return f"All providers failed. Last error: {last_error}"
 
     async def _think(self, question: str = "", steps: int = 5, **kw: Any) -> dict:
         if not question:

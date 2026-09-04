@@ -195,6 +195,13 @@ class LocalUI:
                 return HTMLResponse(content=template.read_text(encoding="utf-8"))
             return HTMLResponse(content="<h1>Preview not available</h1>", status_code=404)
 
+        @app.get("/preview", response_class=HTMLResponse)
+        async def preview_alias():
+            template = BASE_DIR / "templates" / "preview.html"
+            if template.exists():
+                return HTMLResponse(content=template.read_text(encoding="utf-8"))
+            return HTMLResponse(content="<h1>Preview not available</h1>", status_code=404)
+
         @app.get("/api/preview/auto_task")
         async def preview_auto_task():
             try:
@@ -286,19 +293,46 @@ class LocalUI:
         @app.post("/api/plugins/execute")
         async def execute_plugin(request: Request):
             body = await request.json()
-            name = body.get("name", "")
+            plugin_name = body.get("name", "")
             action = body.get("action", "")
             params = body.get("params", {})
-            if not name:
+            if not plugin_name:
                 return JSONResponse(status_code=400, content={"error": "Plugin name required"})
             from client.plugins.manager import plugin_manager
-            result = await plugin_manager.execute(name, action=action, **params)
+            result = await plugin_manager.execute(plugin_name, action=action, **params)
             return result
 
         @app.get("/api/localai/status")
         async def local_ai_status():
             from client.local_ai import get_status
             return get_status()
+
+        @app.post("/api/run")
+        async def run_command(request: Request):
+            import shlex
+            import sys as _sys
+            body = await request.json()
+            command = body.get("command", "")
+            if not command:
+                return JSONResponse(status_code=400, content={"error": "command required"})
+            try:
+                proc = await asyncio.create_subprocess_shell(
+                    command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=str(Path.cwd()),
+                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+                return {
+                    "result": stdout.decode(errors="replace").strip(),
+                    "error": stderr.decode(errors="replace").strip(),
+                    "returncode": proc.returncode,
+                    "success": proc.returncode == 0,
+                }
+            except asyncio.TimeoutError:
+                return {"result": "", "error": "Command timed out (60s)", "returncode": -1, "success": False}
+            except Exception as e:
+                return {"result": "", "error": str(e), "returncode": -1, "success": False}
 
         @app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):

@@ -247,33 +247,32 @@ class Plugin(PluginBase):
         env = self._env
         rec = {"environment": env["platform"], "ram_mb": env["ram_mb"]}
 
+        has_openai = bool(os.environ.get("OPENAI_API_KEY", ""))
+        has_groq = bool(os.environ.get("AI_API_KEY", "") or os.environ.get("GROQ_API_KEY", ""))
+
         if env["is_termux"] or env["ram_mb"] < 4000:
             rec["recommendation"] = {
-                "provider": "ollama",
-                "model": "tinyllama",
-                "reason": f"Termux/Android detected with {env['ram_mb']}MB RAM. Use TinyLlama (~637MB) locally.",
-                "install": "pkg install ollama && ollama pull tinyllama",
-                "alt_provider": "groq",
-                "alt_model": "llama-3.1-8b-instant",
-                "alt_reason": "Free Groq API as fallback (no local RAM needed)",
+                "provider": "openai" if has_openai else "groq",
+                "model": "gpt-4o-mini" if has_openai else "llama-3.1-8b-instant",
+                "reason": f"Termux/Android with {env['ram_mb']}MB RAM.",
+                "alt_provider": "groq" if has_openai else "openai",
+                "alt_model": "llama-3.1-8b-instant" if has_openai else "gpt-4o-mini",
             }
         elif env["ram_mb"] < 8000:
             rec["recommendation"] = {
-                "provider": "groq",
-                "model": "llama-3.1-8b-instant",
-                "reason": f"{env['ram_mb']}MB RAM. Use free Groq API for fast inference.",
-                "alt_provider": "ollama",
-                "alt_model": "phi3",
-                "alt_reason": "Local Phi-3 (~2GB) as fallback",
+                "provider": "openai" if has_openai else "groq",
+                "model": "gpt-4o-mini" if has_openai else "llama-3.1-8b-instant",
+                "reason": f"{env['ram_mb']}MB RAM. OpenAI gpt-4o-mini for quality, Groq for speed.",
+                "alt_provider": "groq",
+                "alt_model": "llama-3.3-70b-versatile",
             }
         else:
             rec["recommendation"] = {
-                "provider": "groq",
-                "model": "llama-3.3-70b-versatile",
-                "reason": f"{env['ram_mb']}MB RAM available. Use Groq 70B for best quality.",
-                "alt_provider": "ollama",
-                "alt_model": "llama3.2",
-                "alt_reason": "Local Llama 3.2 3B for privacy-sensitive tasks",
+                "provider": "openai" if has_openai else "groq",
+                "model": "gpt-4o" if has_openai else "llama-3.3-70b-versatile",
+                "reason": f"{env['ram_mb']}MB RAM. OpenAI for quality, Groq for free fast inference.",
+                "alt_provider": "groq" if has_openai else "openai",
+                "alt_model": "llama-3.3-70b-versatile" if has_openai else "gpt-4o",
             }
 
         return rec

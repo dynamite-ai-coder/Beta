@@ -53,16 +53,16 @@ class PluginManager:
             return True
         return False
 
-    async def execute(self, name: str, **kwargs: Any) -> dict[str, Any]:
-        plugin = self._plugins.get(name)
+    async def execute(self, plugin_name: str, **kwargs: Any) -> dict[str, Any]:
+        plugin = self._plugins.get(plugin_name)
         if not plugin:
-            return {"error": f"Plugin '{name}' not found"}
+            return {"error": f"Plugin '{plugin_name}' not found"}
         if not plugin.enabled:
-            return {"error": f"Plugin '{name}' is disabled"}
+            return {"error": f"Plugin '{plugin_name}' is disabled"}
         try:
             return await plugin.execute(**kwargs)
         except Exception as e:
-            logger.error("Plugin %s error: %s", name, e)
+            logger.error("Plugin %s error: %s", plugin_name, e)
             return {"error": str(e)}
 
     def list_all(self) -> list[dict[str, Any]]:

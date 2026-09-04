@@ -287,6 +287,55 @@ async def _load_model() -> bool:
         return False
 
 
+async def _cloud_preprocess(message: str, file_context: str = "") -> str:
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    groq_key = os.environ.get("AI_API_KEY", "") or os.environ.get("GROQ_API_KEY", "")
+
+    if not openai_key and not groq_key:
+        return ""
+
+    try:
+        import httpx as _httpx
+        if openai_key:
+            base_url = "https://api.openai.com/v1"
+            api_key = openai_key
+            model = "gpt-4o-mini"
+        else:
+            base_url = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1")
+            api_key = groq_key
+            model = os.environ.get("AI_MODEL", "llama-3.1-8b-instant")
+
+        system = (
+            "You are a prompt preprocessor. Improve this user prompt for an AI assistant.\n"
+            "Rules: keep original intent, add relevant context, structure clearly, "
+            "output ONLY the improved prompt, keep concise (under 300 words)."
+        )
+
+        user_prompt = f"Improve this prompt:\n\n{message}"
+        if file_context:
+            lines = [l.strip() for l in file_context.strip().split("\n") if l.strip()][:10]
+            user_prompt = f"File context: {' | '.join(lines)}\n\n{message}\n\nImproved:"
+
+        async with _httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user_prompt}],
+                    "max_tokens": 512,
+                    "temperature": 0.3,
+                },
+            )
+            r.raise_for_status()
+            improved = r.json()["choices"][0]["message"]["content"].strip()
+            if improved and len(improved) > 20:
+                return improved
+    except Exception as e:
+        logger.debug("Cloud preprocessing failed: %s", e)
+    return ""
+
+
 def _preprocess_prompt(message: str, file_context: str = "") -> str:
     if not _local_llm:
         return message
@@ -349,12 +398,26 @@ def preprocess_prompt(message: str, file_context: str = "") -> tuple[str, str]:
         except Exception:
             pass
 
-    if not _local_llm:
+    if _local_llm:
+        processed = _preprocess_prompt(message, file_context)
+        if processed != message:
+            return message, processed
         return message, ""
 
-    processed = _preprocess_prompt(message, file_context)
-    if processed != message:
-        return message, processed
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, _cloud_preprocess(message, file_context))
+                result = future.result(timeout=15)
+        else:
+            result = loop.run_until_complete(_cloud_preprocess(message, file_context))
+        if result and result != message:
+            return message, result
+    except Exception:
+        pass
+
     return message, ""
 
 
@@ -366,12 +429,15 @@ async def preprocess_prompt_async(message: str, file_context: str = "") -> tuple
     if not _model_loaded:
         await _load_model()
 
-    if not _local_llm:
+    if _local_llm:
+        processed = _preprocess_prompt(message, file_context)
+        if processed != message:
+            return message, processed
         return message, ""
 
-    processed = _preprocess_prompt(message, file_context)
-    if processed != message:
-        return message, processed
+    result = await _cloud_preprocess(message, file_context)
+    if result and result != message:
+        return message, result
     return message, ""
 
 
@@ -383,6 +449,10 @@ def get_status() -> dict:
     env = detect_environment()
     rec = env["recommended_config"]
     model_path = _get_model_path()
+
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    groq_key = os.environ.get("AI_API_KEY", "") or os.environ.get("GROQ_API_KEY", "")
+
     return {
         "enabled": os.environ.get("LOCAL_AI_ENABLED", "false").lower() == "true",
         "loaded": _local_llm is not None,
@@ -395,4 +465,7 @@ def get_status() -> dict:
         "context_size": int(os.environ.get("LOCAL_AI_CONTEXT", str(rec["n_ctx"]))),
         "max_tokens": int(os.environ.get("LOCAL_AI_MAX_TOKENS", "256")),
         "threads": int(os.environ.get("LOCAL_AI_THREADS", str(rec["n_threads"]))),
+        "openai_configured": bool(openai_key),
+        "groq_configured": bool(groq_key),
+        "cloud_preprocessor": "openai" if openai_key else ("groq" if groq_key else "none"),
     }

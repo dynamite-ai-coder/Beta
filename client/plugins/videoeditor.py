@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class Plugin(PluginBase):
-    name = "video"
+    name = "videoeditor"
     description = "Video editing: cut, merge, effects, audio, convert, extract, speed, watermark"
     version = "1.0.0"
     author = "Beta"

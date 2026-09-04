@@ -38,31 +38,41 @@ class Plugin(PluginBase):
         if not query:
             return {"error": "query required"}
 
+        results = []
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
                 r = await client.get(
-                    "https://api.duckduckgo.com/",
-                    params={"q": query, "format": "json", "no_redirect": "1"},
+                    "https://html.duckduckgo.com/html/",
+                    params={"q": query},
+                    headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"},
                 )
-                data = r.json()
+                text = r.text
 
-                results = []
-                if data.get("AbstractText"):
-                    results.append({
-                        "title": data.get("Heading", ""),
-                        "url": data.get("AbstractURL", ""),
-                        "snippet": data.get("AbstractText", ""),
-                        "source": "duckduckgo_abstract",
-                    })
-
-                for topic in data.get("RelatedTopics", [])[:num_results]:
-                    if isinstance(topic, dict) and "Text" in topic:
+                import re
+                for match in re.finditer(
+                    r'class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>.*?class="result__snippet"[^>]*>(.*?)</(?:a|td|span|div)',
+                    text, re.DOTALL
+                ):
+                    url, title, snippet = match.groups()
+                    title = re.sub(r'<[^>]+>', '', title).strip()
+                    snippet = re.sub(r'<[^>]+>', '', snippet).strip()
+                    if title:
                         results.append({
-                            "title": topic.get("Text", "")[:100],
-                            "url": topic.get("FirstURL", ""),
-                            "snippet": topic.get("Text", ""),
-                            "source": "duckduckgo_related",
+                            "title": title,
+                            "url": url,
+                            "snippet": snippet,
+                            "source": "duckduckgo",
                         })
+                    if len(results) >= num_results:
+                        break
+
+                if not results and text:
+                    for match in re.finditer(r'class="result__a"[^>]*>(.*?)</a>', text, re.DOTALL):
+                        title = re.sub(r'<[^>]+>', '', match.group(1)).strip()
+                        if title:
+                            results.append({"title": title, "url": "", "snippet": "", "source": "duckduckgo"})
+                        if len(results) >= num_results:
+                            break
 
                 return {"query": query, "results": results[:num_results], "count": len(results)}
         except Exception as e:
