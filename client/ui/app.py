@@ -150,7 +150,7 @@ class LocalUI:
                     headers["Authorization"] = f"Bearer {self._config.api_token}"
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     resp = await client.get(
-                        f"{self._config.backend_url}/v1/tasks",
+                        f"{self._config.backend_url}/api/v1/tasks",
                         headers=headers,
                         params={"limit": 5},
                     )
