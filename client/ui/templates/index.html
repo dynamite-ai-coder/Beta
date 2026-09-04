@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beta Browser AI</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--accent:#58a6ff;--green:#3fb950;--red:#f85149;--yellow:#d29922}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+        .app{display:flex;flex-direction:column;height:100vh}
+        .header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between}
+        .header h1{font-size:16px;font-weight:600}
+        .status-bar{display:flex;gap:16px;font-size:12px;color:var(--text2)}
+        .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+        .dot-green{background:var(--green)}
+        .dot-red{background:var(--red)}
+        .dot-yellow{background:var(--yellow)}
+        .main{display:flex;flex:1;overflow:hidden}
+        .panel{display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--surface)}
+        .panel-header{padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px}
+        .preview-panel{width:55%;min-width:300px}
+        .preview-content{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden}
+        .preview-content img{max-width:100%;max-height:100%;border-radius:6px;border:1px solid var(--border)}
+        .preview-placeholder{color:var(--text2);font-size:14px;text-align:center}
+        .chat-panel{flex:1;display:flex;flex-direction:column;min-width:300px}
+        .chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+        .msg{max-width:85%;padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.5;word-wrap:break-word;white-space:pre-wrap}
+        .msg-user{align-self:flex-end;background:var(--accent);color:#000;border-bottom-right-radius:4px}
+        .msg-ai{align-self:flex-start;background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:4px}
+        .msg-system{align-self:center;background:transparent;color:var(--text2);font-size:12px;padding:4px 8px}
+        .chat-input{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end}
+        .chat-input textarea{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;resize:none;font-family:inherit;min-height:42px;max-height:120px}
+        .chat-input textarea:focus{outline:none;border-color:var(--accent)}
+        .btn{padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:13px;font-weight:500;transition:all .15s}
+        .btn:hover{background:var(--border)}
+        .btn-primary{background:var(--accent);color:#000;border-color:var(--accent)}
+        .btn-primary:hover{opacity:.9}
+        .btn-sm{padding:6px 10px;font-size:12px}
+        .chat-actions{display:flex;gap:8px;margin-top:8px}
+        .nav-bar{padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
+        .nav-bar input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px}
+        .nav-bar input:focus{outline:none;border-color:var(--accent)}
+        .file-upload{position:relative;overflow:hidden}
+        .file-upload input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+        .upload-info{padding:8px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--text2);display:none}
+        .upload-info.active{display:block}
+        @media(max-width:768px){.main{flex-direction:column}.preview-panel{width:100%;height:40%;border-right:none;border-bottom:1px solid var(--border)}}
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="header">
+        <h1>BETA BROWSER AI</h1>
+        <div class="status-bar">
+            <span><span class="status-dot dot-red" id="browser-dot"></span>Browser</span>
+            <span><span class="status-dot dot-green" id="ai-dot"></span>AI</span>
+            <span><span class="status-dot dot-yellow" id="task-dot"></span>Task</span>
+        </div>
+    </div>
+    <div class="main">
+        <div class="panel preview-panel">
+            <div class="panel-header">Browser Preview</div>
+            <div class="nav-bar">
+                <input type="text" id="nav-url" placeholder="Enter URL and press Go">
+                <button class="btn btn-sm" onclick="navigate()">Go</button>
+            </div>
+            <div class="preview-content" id="preview">
+                <div class="preview-placeholder">Browser preview will appear here</div>
+            </div>
+        </div>
+        <div class="panel chat-panel">
+            <div class="panel-header">Chat</div>
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="upload-info" id="upload-info"></div>
+            <div class="chat-actions">
+                <div class="file-upload">
+                    <button class="btn btn-sm">Attach File</button>
+                    <input type="file" id="file-input" accept=".txt,.pdf,.docx,.csv,.json,.png,.jpg,.jpeg" onchange="handleFile(this)">
+                </div>
+                <button class="btn btn-sm" onclick="clearChat()">Clear</button>
+            </div>
+            <div class="chat-input">
+                <textarea id="chat-input" placeholder="Type your message..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"></textarea>
+                <button class="btn btn-primary" onclick="sendChat()">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+let ws=null,fileContext='';
+function connect(){
+    ws=new WebSocket(`ws://${location.host}/ws`);
+    ws.onopen=()=>{document.getElementById('ai-dot').className='status-dot dot-green'};
+    ws.onclose=()=>{document.getElementById('ai-dot').className='status-dot dot-red';setTimeout(connect,3000)};
+    ws.onmessage=e=>{
+        const d=JSON.parse(e.data);
+        if(d.type==='chat_response')addMsg(d.response,'ai');
+        if(d.type==='pong'){}
+    };
+}
+connect();
+
+function addMsg(text,type){
+    const c=document.getElementById('chat-messages');
+    const d=document.createElement('div');
+    d.className=`msg msg-${type}`;
+    d.textContent=text;
+    c.appendChild(d);
+    c.scrollTop=c.scrollHeight;
+}
+
+async function sendChat(){
+    const inp=document.getElementById('chat-input');
+    const msg=inp.value.trim();
+    if(!msg)return;
+    inp.value='';
+    inp.style.height='auto';
+    addMsg(msg,'user');
+    try{
+        const r=await fetch('/api/chat/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,file_context:fileContext})});
+        const d=await r.json();
+        if(r.ok){addMsg(d.response,'ai');fileContext=''}
+        else addMsg('Error: '+(d.error||'Unknown'),'system');
+    }catch(e){addMsg('Connection error','system')}
+}
+
+async function clearChat(){
+    await fetch('/api/chat/clear',{method:'POST'});
+    document.getElementById('chat-messages').innerHTML='';
+}
+
+async function handleFile(input){
+    const file=input.files[0];
+    if(!file)return;
+    const fd=new FormData();
+    fd.append('file',file);
+    try{
+        const r=await fetch('/api/upload',{method:'POST',body:fd});
+        const d=await r.json();
+        if(r.ok){
+            const info=document.getElementById('upload-info');
+            info.className='upload-info active';
+            info.textContent=`Attached: ${d.file_info.name} (${d.file_info.size_human})`;
+            if(d.extracted_text)fileContext=d.extracted_text;
+            addMsg(`File attached: ${d.file_info.name}`,'system');
+        }else addMsg('Upload error: '+d.error,'system');
+    }catch(e){addMsg('Upload failed','system')}
+    input.value='';
+}
+
+async function navigate(){
+    const url=document.getElementById('nav-url').value.trim();
+    if(!url)return;
+    try{await fetch('/api/browser/navigate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url}))}catch(e){}
+}
+
+async function updatePreview(){
+    try{
+        const r=await fetch('/api/browser/screenshot');
+        const d=await r.json();
+        const el=document.getElementById('preview');
+        if(d.screenshot){
+            el.innerHTML=`<img src="data:image/jpeg;base64,${d.screenshot}" alt="Browser">`;
+            document.getElementById('browser-dot').className='status-dot dot-green';
+        }
+    }catch(e){}
+}
+
+async function updateStatus(){
+    try{
+        const r=await fetch('/api/status');
+        const d=await r.json();
+        document.getElementById('browser-dot').className=`status-dot ${d.browser_connected?'dot-green':'dot-red'}`;
+    }catch(e){}
+}
+
+setInterval(updatePreview,500);
+setInterval(updateStatus,5000);
+
+document.getElementById('chat-input').addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'});
+</script>
+</body>
+</html>
