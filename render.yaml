@@ -1,9 +1,11 @@
 services:
   - type: web
-    name: browser-automation
+    name: Beta
     runtime: docker
     plan: free
     envVars:
+      - key: RENDER_API_KEY
+        value: rnd_HzODDgruSZ1SPdWpJHwLsJgLiqjB
       - key: AI_API_KEY
         sync: false
       - key: AI_MODEL
@@ -72,6 +74,6 @@ services:
         value: "false"
 
 databases:
-  - name: browser-automation-db
+  - name: Beta-db
     plan: free
-    databaseName: browser_automation
+    databaseName: beta
