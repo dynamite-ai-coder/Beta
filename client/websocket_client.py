@@ -68,7 +68,7 @@ class WebSocketClient:
             reg = msg_register(self.config.client_id, self.config.client_token)
             await ws.send(json.dumps(reg))
 
-            raw = await asyncio.wait_for(ws.receive_text(), timeout=10.0)
+            raw = await asyncio.wait_for(ws.recv(), timeout=10.0)
             resp = parse_message(raw)
             if not resp or resp.get("type") != "CLIENT_REGISTERED":
                 logger.error("Registration failed")
