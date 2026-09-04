@@ -23,5 +23,6 @@ croniter==3.0.0
 # Monitoring
 prometheus-client==0.21.0
 
-# Browser automation (optional - AI-powered, install separately)
-# browser-use>=0.13.0  # pip install browser-use (heavy deps: playwright, langchain)
+# Browser automation
+selenium>=4.25.0
+undetected-chromedriver>=3.5.5

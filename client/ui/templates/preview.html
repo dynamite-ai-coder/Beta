@@ -3,143 +3,159 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Beta - Browser Preview</title>
+    <title>Beta - Live Preview</title>
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#0d1117;color:#e6edf3;height:100vh;overflow:hidden;display:flex;flex-direction:column}
-        .header{background:#161b22;border-bottom:1px solid #30363d;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-        .header h1{font-size:14px;font-weight:600}
-        .controls{display:flex;gap:8px;align-items:center}
-        .status{font-size:12px;color:#8b949e;display:flex;align-items:center;gap:6px}
-        .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#000;color:#e6edf3;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+        .bar{background:#161b22;border-bottom:1px solid #30363d;padding:6px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;height:36px}
+        .bar h1{font-size:12px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:1px}
+        .info{display:flex;gap:12px;align-items:center;font-size:11px;color:#8b949e}
+        .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px}
         .dot-green{background:#3fb950}
         .dot-red{background:#f85149}
         .dot-yellow{background:#d29922}
         .dot-gray{background:#484f58}
-        .preview{flex:1;display:flex;align-items:center;justify-content:center;padding:8px;overflow:hidden}
-        .preview img{max-width:100%;max-height:100%;border-radius:6px;border:1px solid #30363d;object-fit:contain}
-        .placeholder{color:#8b949e;font-size:14px;text-align:center}
-        .task-info{font-size:11px;color:#8b949e;padding:4px 16px;border-top:1px solid #30363d;background:#161b22;flex-shrink:0}
-        .btn{padding:5px 10px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#e6edf3;cursor:pointer;font-size:12px;font-weight:500;transition:all .15s}
-        .btn:hover{background:#30363d}
-        .btn-primary{background:#58a6ff;color:#000;border-color:#58a6ff}
-        .btn-primary:hover{opacity:.9}
-        select{background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;padding:4px 8px;font-size:12px}
+        .live{flex:1;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden;position:relative}
+        .live img{width:320px;height:240px;image-rendering:pixelated;border:1px solid #30363d}
+        .badge{position:absolute;top:8px;left:8px;background:#f85149;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;display:none;letter-spacing:0.5px}
+        .badge.on{display:block}
+        .fps{position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.7);color:#3fb950;font-size:10px;font-weight:600;padding:2px 6px;border-radius:3px;font-family:monospace}
+        .placeholder{color:#484f58;font-size:13px;text-align:center}
+        .ctrls{background:#161b22;border-top:1px solid #30363d;padding:4px 12px;display:flex;gap:8px;align-items:center;flex-shrink:0;height:30px}
+        .ctrls label{font-size:11px;color:#8b949e}
+        .ctrls select,.ctrls input{background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#e6edf3;padding:2px 6px;font-size:11px}
+        .ctrls button{padding:2px 8px;border-radius:4px;border:1px solid #30363d;background:#161b22;color:#e6edf3;cursor:pointer;font-size:11px}
+        .ctrls button:hover{background:#30363d}
+        .ctrls button.active{background:#238636;border-color:#238636;color:#fff}
     </style>
 </head>
 <body>
-<div class="header">
-    <h1>BROWSER PREVIEW</h1>
-    <div class="controls">
-        <select id="task-select" onchange="selectTask(this.value)">
-            <option value="">-- Select task --</option>
-        </select>
-        <div class="status">
-            <span><span class="dot dot-gray" id="status-dot"></span><span id="status-text">Connecting...</span></span>
-        </div>
-        <button class="btn" onclick="refreshTasks()">Refresh</button>
-        <button class="btn btn-primary" id="auto-btn" onclick="toggleAuto()">Auto: ON</button>
+<div class="bar">
+    <h1>&#9654; LIVE PREVIEW</h1>
+    <div class="info">
+        <span><span class="dot dot-gray" id="sd"></span><span id="st">Connecting...</span></span>
+        <span id="task-label">No task</span>
     </div>
 </div>
-<div class="preview" id="preview">
-    <div class="placeholder" id="placeholder">Select a task to view live browser preview</div>
-    <img id="screenshot" style="display:none" alt="Browser preview">
+<div class="live" id="live">
+    <div class="placeholder" id="ph">Waiting for stream...</div>
+    <div class="badge" id="badge">LIVE</div>
+    <div class="fps" id="fps"></div>
 </div>
-<div class="task-info" id="task-info">No task selected</div>
+<div class="ctrls">
+    <label>FPS:</label>
+    <select id="fps-sel" onchange="setFps(this.value)">
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="15" selected>15</option>
+        <option value="20">20</option>
+        <option value="30">30</option>
+    </select>
+    <label>Task:</label>
+    <select id="task-sel" onchange="switchTask(this.value)"><option value="">Auto</option></select>
+    <button id="btn-refresh" onclick="refreshTasks()">Refresh</button>
+    <button id="btn-reconnect" onclick="reconnect()">Reconnect</button>
+</div>
 
 <script>
 let currentTaskId='';
-let autoRefresh=true;
-let refreshInterval=null;
-let refreshMs=2000;
+let fps=15;
+let streamUrl='';
+let frameCount=0;
+let lastFpsTime=Date.now();
+let imgEl=null;
+
+function setStatus(c,t){document.getElementById('sd').className='dot dot-'+c;document.getElementById('st').textContent=t}
+
+function startStream(){
+    stopStream();
+    if(!currentTaskId){setStatus('gray','No task');return}
+    streamUrl='/api/preview/stream?task_id='+encodeURIComponent(currentTaskId)+'&fps='+fps;
+    const live=document.getElementById('live');
+    const ph=document.getElementById('ph');
+    if(imgEl){imgEl.remove();imgEl=null}
+    imgEl=document.createElement('img');
+    imgEl.id='stream-img';
+    imgEl.onload=function(){
+        ph.style.display='none';
+        document.getElementById('badge').className='badge on';
+        setStatus('green','Streaming');
+        trackFps();
+    };
+    imgEl.onerror=function(){
+        document.getElementById('badge').className='badge';
+        setStatus('red','Stream error');
+    };
+    imgEl.src=streamUrl;
+    live.appendChild(imgEl);
+}
+
+function stopStream(){
+    if(imgEl){imgEl.src='';imgEl.remove();imgEl=null}
+    document.getElementById('badge').className='badge';
+    document.getElementById('fps').textContent='';
+}
+
+function trackFps(){
+    frameCount=0;
+    lastFpsTime=Date.now();
+    const countFrame=()=>{
+        if(!imgEl)return;
+        frameCount++;
+        const now=Date.now();
+        if(now-lastFpsTime>=1000){
+            document.getElementById('fps').textContent=frameCount+' fps';
+            frameCount=0;
+            lastFpsTime=now;
+        }
+        requestAnimationFrame(countFrame);
+    };
+    requestAnimationFrame(countFrame);
+}
+
+function setFps(v){fps=parseInt(v);if(currentTaskId)startStream()}
+
+function switchTask(tid){
+    currentTaskId=tid;
+    document.getElementById('task-label').textContent=tid?'Task: '+tid.substring(0,8)+'...':'Auto';
+    if(tid)startStream();
+    else autoDetect();
+}
+
+function reconnect(){startStream()}
 
 async function refreshTasks(){
     try{
         const r=await fetch('/api/preview/tasks');
         const d=await r.json();
-        const sel=document.getElementById('task-select');
-        const prev=sel.value;
-        sel.innerHTML='<option value="">-- Select task --</option>';
-        if(d.current_task_id){
-            const opt=document.createElement('option');
-            opt.value=d.current_task_id;
-            opt.textContent='Current: '+d.current_task_id.substring(0,8)+'...';
-            sel.appendChild(opt);
-            if(!currentTaskId)selectTask(d.current_task_id);
-        }
+        const sel=document.getElementById('task-sel');
+        sel.innerHTML='<option value="">Auto</option>';
         (d.tasks||[]).forEach(t=>{
-            if(t.task_id===d.current_task_id)return;
-            const opt=document.createElement('option');
-            opt.value=t.task_id;
-            opt.textContent=t.task_id.substring(0,8)+'... ('+t.state+')';
-            sel.appendChild(opt);
+            const o=document.createElement('option');
+            o.value=t.task_id;
+            o.textContent=t.task_id.substring(0,8)+'... ('+t.state+')';
+            sel.appendChild(o);
         });
-        if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;
-        setStatus('green','Connected');
-    }catch(e){
-        setStatus('red','Connection error');
-    }
+    }catch(e){}
 }
 
-function selectTask(taskId){
-    currentTaskId=taskId;
-    document.getElementById('task-select').value=taskId;
-    if(taskId){
-        document.getElementById('task-info').textContent='Task: '+taskId;
-        fetchScreenshot();
-        startAutoRefresh();
-    }else{
-        document.getElementById('screenshot').style.display='none';
-        document.getElementById('placeholder').style.display='block';
-        document.getElementById('task-info').textContent='No task selected';
-        stopAutoRefresh();
-    }
-}
-
-async function fetchScreenshot(){
-    if(!currentTaskId)return;
+async function autoDetect(){
     try{
-        const r=await fetch('/api/preview/screenshot/'+currentTaskId);
+        const r=await fetch('/api/preview/auto_task');
         const d=await r.json();
-        if(d.screenshot){
-            const img=document.getElementById('screenshot');
-            img.src='data:image/png;base64,'+d.screenshot;
-            img.style.display='block';
-            document.getElementById('placeholder').style.display='none';
-            setStatus('green','Live');
-        }else{
-            setStatus('yellow','No screenshot');
+        if(d.task_id&&d.task_id!==currentTaskId){
+            currentTaskId=d.task_id;
+            document.getElementById('task-label').textContent='Task: '+d.task_id.substring(0,8)+'...';
+            startStream();
+        }else if(!d.task_id){
+            setStatus('yellow','No active task');
         }
-    }catch(e){
-        setStatus('red','Error');
-    }
-}
-
-function startAutoRefresh(){
-    stopAutoRefresh();
-    if(autoRefresh&&currentTaskId){
-        refreshInterval=setInterval(fetchScreenshot,refreshMs);
-    }
-}
-
-function stopAutoRefresh(){
-    if(refreshInterval){clearInterval(refreshInterval);refreshInterval=null}
-}
-
-function toggleAuto(){
-    autoRefresh=!autoRefresh;
-    document.getElementById('auto-btn').textContent='Auto: '+(autoRefresh?'ON':'OFF');
-    if(autoRefresh)startAutoRefresh();
-    else stopAutoRefresh();
-}
-
-function setStatus(color,text){
-    const dot=document.getElementById('status-dot');
-    dot.className='dot dot-'+color;
-    document.getElementById('status-text').textContent=text;
+    }catch(e){setStatus('red','Error')}
 }
 
 refreshTasks();
+autoDetect();
+setInterval(autoDetect,5000);
 </script>
 </body>
 </html>

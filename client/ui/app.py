@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import io
 import json
 import logging
 import os
@@ -11,8 +13,14 @@ from typing import Any, Optional
 
 import httpx
 from fastapi import FastAPI, File, Form, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+
+try:
+    from PIL import Image
+    _HAS_PIL = True
+except ImportError:
+    _HAS_PIL = False
 
 from client.config import ClientConfig
 from client.chat import ChatClient
@@ -186,6 +194,89 @@ class LocalUI:
             if template.exists():
                 return HTMLResponse(content=template.read_text(encoding="utf-8"))
             return HTMLResponse(content="<h1>Preview not available</h1>", status_code=404)
+
+        @app.get("/api/preview/auto_task")
+        async def preview_auto_task():
+            try:
+                headers = {}
+                if self._config.api_token:
+                    headers["Authorization"] = f"Bearer {self._config.api_token}"
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"{self._config.backend_url}/api/v1/tasks",
+                        headers=headers,
+                        params={"limit": 1, "state": "running"},
+                    )
+                    if resp.status_code == 200:
+                        tasks = resp.json()
+                        if tasks:
+                            return {"task_id": tasks[0]["task_id"], "state": tasks[0]["state"]}
+                    resp2 = await client.get(
+                        f"{self._config.backend_url}/api/v1/tasks",
+                        headers=headers,
+                        params={"limit": 1},
+                    )
+                    if resp2.status_code == 200:
+                        tasks2 = resp2.json()
+                        if tasks2:
+                            return {"task_id": tasks2[0]["task_id"], "state": tasks2[0]["state"]}
+            except Exception as e:
+                logger.error(f"Auto task error: {e}")
+            return {"task_id": None, "state": None}
+
+        @app.get("/api/preview/stream")
+        async def preview_stream(task_id: str = "", fps: int = 15):
+            if not task_id:
+                return JSONResponse(status_code=400, content={"error": "task_id required"})
+
+            fps = max(1, min(fps, 30))
+            interval = 1.0 / fps
+
+            async def mjpeg_generator():
+                headers = {}
+                if self._config.api_token:
+                    headers["Authorization"] = f"Bearer {self._config.api_token}"
+
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    while True:
+                        try:
+                            resp = await client.get(
+                                f"{self._config.backend_url}/v1/browser/screenshot/{task_id}",
+                                headers=headers,
+                            )
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                b64 = data.get("screenshot")
+                                if b64:
+                                    jpeg_bytes = base64.b64decode(b64)
+                                    if _HAS_PIL:
+                                        try:
+                                            img = Image.open(io.BytesIO(jpeg_bytes))
+                                            img = img.resize((320, 240), Image.LANCZOS)
+                                            buf = io.BytesIO()
+                                            img.save(buf, format="JPEG", quality=75, optimize=True)
+                                            jpeg_bytes = buf.getvalue()
+                                        except Exception:
+                                            pass
+                                    yield (
+                                        b"--frame\r\n"
+                                        b"Content-Type: image/jpeg\r\n"
+                                        b"Content-Length: " + str(len(jpeg_bytes)).encode() + b"\r\n\r\n"
+                                        + jpeg_bytes + b"\r\n"
+                                    )
+                        except Exception as e:
+                            logger.debug(f"Stream frame error: {e}")
+
+                        await asyncio.sleep(interval)
+
+            return StreamingResponse(
+                mjpeg_generator(),
+                media_type="multipart/x-mixed-replace; boundary=frame",
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "X-Accel-Buffering": "no",
+                },
+            )
 
         @app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
