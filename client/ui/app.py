@@ -9,6 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
+import httpx
 from fastapi import FastAPI, File, Form, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -36,6 +37,8 @@ class LocalUI:
         self._ws_clients: list[WebSocket] = []
         self._browser_worker = None
         self._browser_preview = None
+        self._current_task_id: Optional[str] = None
+        self._current_preview_token: Optional[str] = None
         self._setup_routes()
 
     @property
@@ -47,6 +50,10 @@ class LocalUI:
 
     def set_browser_preview(self, preview: Any) -> None:
         self._browser_preview = preview
+
+    def set_current_task(self, task_id: str, preview_token: str = "") -> None:
+        self._current_task_id = task_id
+        self._current_preview_token = preview_token
 
     def _setup_routes(self) -> None:
         app = self._app
@@ -134,6 +141,51 @@ class LocalUI:
                 return JSONResponse(status_code=503, content={"error": "Browser not ready"})
             ok = await self._browser_worker.navigate(url)
             return {"status": "ok" if ok else "failed"}
+
+        @app.get("/api/preview/tasks")
+        async def preview_tasks():
+            try:
+                headers = {}
+                if self._config.api_token:
+                    headers["Authorization"] = f"Bearer {self._config.api_token}"
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"{self._config.backend_url}/v1/tasks",
+                        headers=headers,
+                        params={"limit": 5},
+                    )
+                    if resp.status_code == 200:
+                        tasks = resp.json()
+                        return {"tasks": tasks, "current_task_id": self._current_task_id}
+                    return {"tasks": [], "error": f"Backend returned {resp.status_code}", "current_task_id": self._current_task_id}
+            except Exception as e:
+                logger.error(f"Preview tasks error: {e}")
+                return {"tasks": [], "error": str(e), "current_task_id": self._current_task_id}
+
+        @app.get("/api/preview/screenshot/{task_id}")
+        async def preview_screenshot(task_id: str):
+            try:
+                headers = {}
+                if self._config.api_token:
+                    headers["Authorization"] = f"Bearer {self._config.api_token}"
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"{self._config.backend_url}/v1/browser/screenshot/{task_id}",
+                        headers=headers,
+                    )
+                    if resp.status_code == 200:
+                        return resp.json()
+                    return {"screenshot": None, "error": f"Backend returned {resp.status_code}"}
+            except Exception as e:
+                logger.error(f"Preview screenshot error: {e}")
+                return {"screenshot": None, "error": str(e)}
+
+        @app.get("/api/preview")
+        async def preview_page():
+            template = BASE_DIR / "templates" / "preview.html"
+            if template.exists():
+                return HTMLResponse(content=template.read_text(encoding="utf-8"))
+            return HTMLResponse(content="<h1>Preview not available</h1>", status_code=404)
 
         @app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):

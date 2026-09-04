@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beta - Browser Preview</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#0d1117;color:#e6edf3;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+        .header{background:#161b22;border-bottom:1px solid #30363d;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+        .header h1{font-size:14px;font-weight:600}
+        .controls{display:flex;gap:8px;align-items:center}
+        .status{font-size:12px;color:#8b949e;display:flex;align-items:center;gap:6px}
+        .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+        .dot-green{background:#3fb950}
+        .dot-red{background:#f85149}
+        .dot-yellow{background:#d29922}
+        .dot-gray{background:#484f58}
+        .preview{flex:1;display:flex;align-items:center;justify-content:center;padding:8px;overflow:hidden}
+        .preview img{max-width:100%;max-height:100%;border-radius:6px;border:1px solid #30363d;object-fit:contain}
+        .placeholder{color:#8b949e;font-size:14px;text-align:center}
+        .task-info{font-size:11px;color:#8b949e;padding:4px 16px;border-top:1px solid #30363d;background:#161b22;flex-shrink:0}
+        .btn{padding:5px 10px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#e6edf3;cursor:pointer;font-size:12px;font-weight:500;transition:all .15s}
+        .btn:hover{background:#30363d}
+        .btn-primary{background:#58a6ff;color:#000;border-color:#58a6ff}
+        .btn-primary:hover{opacity:.9}
+        select{background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;padding:4px 8px;font-size:12px}
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>BROWSER PREVIEW</h1>
+    <div class="controls">
+        <select id="task-select" onchange="selectTask(this.value)">
+            <option value="">-- Select task --</option>
+        </select>
+        <div class="status">
+            <span><span class="dot dot-gray" id="status-dot"></span><span id="status-text">Connecting...</span></span>
+        </div>
+        <button class="btn" onclick="refreshTasks()">Refresh</button>
+        <button class="btn btn-primary" id="auto-btn" onclick="toggleAuto()">Auto: ON</button>
+    </div>
+</div>
+<div class="preview" id="preview">
+    <div class="placeholder" id="placeholder">Select a task to view live browser preview</div>
+    <img id="screenshot" style="display:none" alt="Browser preview">
+</div>
+<div class="task-info" id="task-info">No task selected</div>
+
+<script>
+let currentTaskId='';
+let autoRefresh=true;
+let refreshInterval=null;
+let refreshMs=2000;
+
+async function refreshTasks(){
+    try{
+        const r=await fetch('/api/preview/tasks');
+        const d=await r.json();
+        const sel=document.getElementById('task-select');
+        const prev=sel.value;
+        sel.innerHTML='<option value="">-- Select task --</option>';
+        if(d.current_task_id){
+            const opt=document.createElement('option');
+            opt.value=d.current_task_id;
+            opt.textContent='Current: '+d.current_task_id.substring(0,8)+'...';
+            sel.appendChild(opt);
+            if(!currentTaskId)selectTask(d.current_task_id);
+        }
+        (d.tasks||[]).forEach(t=>{
+            if(t.task_id===d.current_task_id)return;
+            const opt=document.createElement('option');
+            opt.value=t.task_id;
+            opt.textContent=t.task_id.substring(0,8)+'... ('+t.state+')';
+            sel.appendChild(opt);
+        });
+        if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;
+        setStatus('green','Connected');
+    }catch(e){
+        setStatus('red','Connection error');
+    }
+}
+
+function selectTask(taskId){
+    currentTaskId=taskId;
+    document.getElementById('task-select').value=taskId;
+    if(taskId){
+        document.getElementById('task-info').textContent='Task: '+taskId;
+        fetchScreenshot();
+        startAutoRefresh();
+    }else{
+        document.getElementById('screenshot').style.display='none';
+        document.getElementById('placeholder').style.display='block';
+        document.getElementById('task-info').textContent='No task selected';
+        stopAutoRefresh();
+    }
+}
+
+async function fetchScreenshot(){
+    if(!currentTaskId)return;
+    try{
+        const r=await fetch('/api/preview/screenshot/'+currentTaskId);
+        const d=await r.json();
+        if(d.screenshot){
+            const img=document.getElementById('screenshot');
+            img.src='data:image/png;base64,'+d.screenshot;
+            img.style.display='block';
+            document.getElementById('placeholder').style.display='none';
+            setStatus('green','Live');
+        }else{
+            setStatus('yellow','No screenshot');
+        }
+    }catch(e){
+        setStatus('red','Error');
+    }
+}
+
+function startAutoRefresh(){
+    stopAutoRefresh();
+    if(autoRefresh&&currentTaskId){
+        refreshInterval=setInterval(fetchScreenshot,refreshMs);
+    }
+}
+
+function stopAutoRefresh(){
+    if(refreshInterval){clearInterval(refreshInterval);refreshInterval=null}
+}
+
+function toggleAuto(){
+    autoRefresh=!autoRefresh;
+    document.getElementById('auto-btn').textContent='Auto: '+(autoRefresh?'ON':'OFF');
+    if(autoRefresh)startAutoRefresh();
+    else stopAutoRefresh();
+}
+
+function setStatus(color,text){
+    const dot=document.getElementById('status-dot');
+    dot.className='dot dot-'+color;
+    document.getElementById('status-text').textContent=text;
+}
+
+refreshTasks();
+</script>
+</body>
+</html>
