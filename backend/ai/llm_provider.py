@@ -16,7 +16,57 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 BASE_DELAY = 2.0
-MAX_DELAY = 60.0
+MAX_DELAY = 30.0
+
+
+class KeyPool:
+    def __init__(self) -> None:
+        self._keys: list[str] = []
+        self._last_used: dict[str, float] = {}
+        self._lock = asyncio.Lock()
+        self._min_interval = 3.0
+
+    def load(self) -> None:
+        seen = set()
+        for i in range(1, 6):
+            key = getattr(settings, f"groq_agent_{i}_api_key", "")
+            if key and key not in seen:
+                self._keys.append(key)
+                self._last_used[key] = 0.0
+                seen.add(key)
+        if settings.ai_api_key and settings.ai_api_key not in seen:
+            self._keys.append(settings.ai_api_key)
+            self._last_used[settings.ai_api_key] = 0.0
+        logger.info(f"Key pool loaded: {len(self._keys)} keys")
+
+    async def acquire(self) -> str | None:
+        async with self._lock:
+            now = time.monotonic()
+            best_key = None
+            best_wait = float("inf")
+            for key in self._keys:
+                elapsed = now - self._last_used[key]
+                wait = max(0.0, self._min_interval - elapsed)
+                if wait < best_wait:
+                    best_wait = wait
+                    best_key = key
+            if best_key and best_wait > 0:
+                self._lock.release()
+                await asyncio.sleep(best_wait)
+                await self._lock.acquire()
+            if best_key:
+                self._last_used[best_key] = time.monotonic()
+            return best_key
+
+    def mark_used(self, key: str) -> None:
+        self._last_used[key] = time.monotonic()
+
+    @property
+    def count(self) -> int:
+        return len(self._keys)
+
+
+key_pool = KeyPool()
 
 
 class GroqAgentProvider:
@@ -24,12 +74,10 @@ class GroqAgentProvider:
         self.role = agent_role
         self.agent_number = agent_number
         cfg = settings.get_agent_config(agent_number)
-        self.api_key = cfg["api_key"]
+        self._fallback_key = cfg["api_key"]
         self.model = cfg["model"]
         self.base_url = cfg["base_url"].rstrip("/")
         self.system_prompt = AGENT_SYSTEM_PROMPTS.get(agent_role, "")
-        self._last_request_time = 0.0
-        self._min_request_interval = 2.5
 
     async def chat(self, user_message: str, context_summary: str = "") -> AgentOutput:
         start = time.monotonic()
@@ -39,12 +87,10 @@ class GroqAgentProvider:
         for attempt in range(MAX_RETRIES):
             try:
                 delay = min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
-                elapsed = time.monotonic() - self._last_request_time
-                if elapsed < self._min_request_interval:
-                    await asyncio.sleep(self._min_request_interval - elapsed)
+                key = await key_pool.acquire() or self._fallback_key
 
-                result = await self._send_request(messages)
-                self._last_request_time = time.monotonic()
+                result = await self._send_request(messages, key)
+                key_pool.mark_used(key)
 
                 if result.success:
                     result.duration_ms = (time.monotonic() - start) * 1000
@@ -53,7 +99,7 @@ class GroqAgentProvider:
                 last_error = result.error
                 if result.error and "Rate limited" in result.error:
                     logger.warning(
-                        f"Agent {self.role.value} rate limited, "
+                        f"Agent {self.role.value} rate limited on key...{key[-6:]}, "
                         f"retry {attempt + 1}/{MAX_RETRIES} in {delay:.1f}s"
                     )
                     await asyncio.sleep(delay)
@@ -64,12 +110,9 @@ class GroqAgentProvider:
 
             except Exception as e:
                 last_error = str(e)
-                logger.error(
-                    f"Agent {self.role.value} attempt {attempt + 1} error: {e}"
-                )
+                logger.error(f"Agent {self.role.value} attempt {attempt + 1} error: {e}")
                 if attempt < MAX_RETRIES - 1:
-                    delay = min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
-                    await asyncio.sleep(delay)
+                    await asyncio.sleep(min(BASE_DELAY * (2 ** attempt), MAX_DELAY))
 
         logger.error(f"Agent {self.role.value} failed after {MAX_RETRIES} attempts")
         return AgentOutput(
@@ -87,14 +130,14 @@ class GroqAgentProvider:
         messages.append({"role": "user", "content": user_message})
         return messages
 
-    async def _send_request(self, messages: list[dict]) -> AgentOutput:
+    async def _send_request(self, messages: list[dict], api_key: str) -> AgentOutput:
         start = time.monotonic()
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers={
-                        "Authorization": f"Bearer {self.api_key}",
+                        "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",
                     },
                     json={
@@ -106,11 +149,6 @@ class GroqAgentProvider:
                 )
 
                 if resp.status_code == 429:
-                    retry_after = resp.headers.get("retry-after")
-                    logger.warning(
-                        f"Agent {self.role.value} rate limited "
-                        f"(retry-after: {retry_after})"
-                    )
                     return AgentOutput(
                         agent=self.role, success=False,
                         error="Rate limited",
@@ -118,7 +156,6 @@ class GroqAgentProvider:
                     )
 
                 if resp.status_code == 503:
-                    logger.warning(f"Agent {self.role.value} service unavailable")
                     return AgentOutput(
                         agent=self.role, success=False,
                         error="Service unavailable",
@@ -130,6 +167,8 @@ class GroqAgentProvider:
                 content = data["choices"][0]["message"]["content"]
                 usage = data.get("usage", {})
                 parsed = self._parse_response(content)
+                if not isinstance(parsed, dict):
+                    parsed = {"solution": str(parsed), "confidence": 0.6}
                 confidence = parsed.get("confidence", 0.7)
 
                 return AgentOutput(
@@ -139,19 +178,16 @@ class GroqAgentProvider:
                     duration_ms=(time.monotonic() - start) * 1000,
                 )
         except httpx.TimeoutException:
-            logger.error(f"Agent {self.role.value} request timeout")
             return AgentOutput(
                 agent=self.role, success=False, error="Timeout",
                 duration_ms=(time.monotonic() - start) * 1000,
             )
         except httpx.ConnectError as e:
-            logger.error(f"Agent {self.role.value} connection error: {e}")
             return AgentOutput(
                 agent=self.role, success=False, error=f"Connection error: {e}",
                 duration_ms=(time.monotonic() - start) * 1000,
             )
         except Exception as e:
-            logger.error(f"Agent {self.role.value} unexpected error: {e}")
             return AgentOutput(
                 agent=self.role, success=False, error=str(e),
                 duration_ms=(time.monotonic() - start) * 1000,

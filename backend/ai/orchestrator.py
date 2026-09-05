@@ -31,7 +31,11 @@ class AIOrchestrator:
     async def process(self, request: VirtualAIRequest) -> VirtualAIResponse:
         async with self._lock:
             if self._active_workflows >= settings.max_ai_workflows:
-                raise RuntimeError("Max concurrent AI workflows reached")
+                logger.warning(f"Workflow queue full ({self._active_workflows}), waiting...")
+            while self._active_workflows >= settings.max_ai_workflows:
+                self._lock.release()
+                await asyncio.sleep(0.5)
+                await self._lock.acquire()
             self._active_workflows += 1
 
         try:
@@ -44,7 +48,7 @@ class AIOrchestrator:
             return self._build_timeout_response(request)
         finally:
             async with self._lock:
-                self._active_workflows -= 1
+                self._active_workflows = max(0, self._active_workflows - 1)
 
     async def _run_workflow(self, request: VirtualAIRequest) -> VirtualAIResponse:
         task_id = f"beta-{uuid.uuid4().hex[:12]}"

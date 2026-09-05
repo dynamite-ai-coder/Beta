@@ -89,5 +89,6 @@ Your responsibilities:
 You receive outputs from all other agents. Synthesize them into one clear, accurate, helpful response.
 Focus on evidence and logical consistency. Do not blindly select majority answers.
 
-Provide the final answer that the user should see.""",
+IMPORTANT: Return ONLY the final answer as plain text. Do NOT return JSON, do NOT wrap in code blocks.
+Just return the natural language answer the user should see. Keep it concise and helpful.""",
 }

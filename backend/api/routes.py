@@ -28,6 +28,30 @@ from backend.security.auth import create_session_token, verify_api_key
 from backend.streaming.preview import preview_streamer
 from backend.streaming.websocket import ws_manager
 from backend.tasks.scheduler import scheduler
+
+
+def _extract_plain_text(msg: str) -> str:
+    """Extract plain text from AI response that might be JSON."""
+    if not msg:
+        return msg
+    stripped = msg.strip()
+    if stripped.startswith("{"):
+        try:
+            data = json.loads(stripped)
+            for key in ("solution", "answer", "response", "result", "text"):
+                if key in data and isinstance(data[key], str):
+                    return data[key]
+            return stripped
+        except (json.JSONDecodeError, ValueError):
+            pass
+    if stripped.startswith("```"):
+        lines = stripped.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        return "\n".join(lines)
+    return msg
 from backend.ai.models import VirtualAIRequest
 from backend.ai.orchestrator import orchestrator
 from backend.services.client_manager import client_manager
@@ -552,6 +576,7 @@ async def chat_send(request: Request):
         )
         response = await orchestrator.process(ai_req)
         assistant_msg = response.choices[0].message["content"]
+        assistant_msg = _extract_plain_text(assistant_msg)
         chat_history.add_message(session.session_id, "assistant", assistant_msg)
 
         return {
