@@ -9,7 +9,7 @@ services:
       - key: AI_API_KEY
         sync: false
       - key: AI_MODEL
-        value: llama-3.3-70b-versatile
+        value: openai/gpt-oss-120b
       - key: AI_BASE_URL
         value: https://api.groq.com/openai/v1
       - key: AI_PROVIDER
@@ -33,31 +33,31 @@ services:
       - key: GROQ_AGENT_1_API_KEY
         sync: false
       - key: GROQ_AGENT_1_MODEL
-        value: llama-3.3-70b-versatile
+        value: openai/gpt-oss-120b
       - key: GROQ_AGENT_1_BASE_URL
         value: https://api.groq.com/openai/v1
       - key: GROQ_AGENT_2_API_KEY
         sync: false
       - key: GROQ_AGENT_2_MODEL
-        value: openai/gpt-oss-120b
+        value: qwen/qwen3.6-27b
       - key: GROQ_AGENT_2_BASE_URL
         value: https://api.groq.com/openai/v1
       - key: GROQ_AGENT_3_API_KEY
         sync: false
       - key: GROQ_AGENT_3_MODEL
-        value: qwen/qwen3-32b
+        value: allam-2-7b
       - key: GROQ_AGENT_3_BASE_URL
         value: https://api.groq.com/openai/v1
       - key: GROQ_AGENT_4_API_KEY
         sync: false
       - key: GROQ_AGENT_4_MODEL
-        value: openai/gpt-oss-20b
+        value: qwen/qwen3.8-27b
       - key: GROQ_AGENT_4_BASE_URL
         value: https://api.groq.com/openai/v1
       - key: GROQ_AGENT_5_API_KEY
         sync: false
       - key: GROQ_AGENT_5_MODEL
-        value: meta-llama/llama-4-scout-17b-16e-instruct
+        value: openai/gpt-oss-20b
       - key: GROQ_AGENT_5_BASE_URL
         value: https://api.groq.com/openai/v1
       - key: ALLOWED_DOMAINS

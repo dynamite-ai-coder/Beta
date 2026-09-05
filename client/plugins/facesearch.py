@@ -27,15 +27,9 @@ class Plugin(PluginBase):
         super().__init__(config)
         self._output_dir = Path(os.environ.get("FACSEARCH_DIR", "./facesearch"))
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        self._groq_key = os.environ.get("AI_API_KEY", "")
-        self._openai_key = os.environ.get("OPENAI_API_KEY", "")
-        self._api_key = self._groq_key or self._openai_key
-        self._groq_url = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1")
-        self._groq_model = os.environ.get("AI_MODEL", "llama-3.3-70b-versatile")
-        self._openai_url = "https://api.openai.com/v1"
-        self._openai_model = "gpt-4o-mini"
-        self._base_url = self._groq_url if self._groq_key else self._openai_url
-        self._model = self._groq_model if self._groq_key else self._openai_model
+        self._api_key = os.environ.get("AI_API_KEY", "")
+        self._base_url = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1")
+        self._model = os.environ.get("AI_MODEL", "llama-3.3-70b-versatile")
 
     async def execute(self, action: str = "analyze", **kw: Any) -> dict[str, Any]:
         actions = {
@@ -56,80 +50,54 @@ class Plugin(PluginBase):
         return await fn(**kw)
 
     async def _call_llm_vision(self, system: str, prompt: str, image_b64: str) -> str:
-        providers = []
-        if self._groq_key:
-            providers.append(("groq", self._groq_url, self._groq_key, self._groq_model))
-        if self._openai_key:
-            providers.append(("openai", self._openai_url, self._openai_key, self._openai_model))
-
-        if not providers:
-            return "Error: No API keys configured"
-
-        last_error = ""
-        for name, base_url, api_key, model in providers:
-            try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    r = await client.post(
-                        f"{base_url}/chat/completions",
-                        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                        json={
-                            "model": model,
-                            "messages": [{
-                                "role": "user",
-                                "content": [
-                                    {"type": "text", "text": f"{system}\n\n{prompt}"},
-                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
-                                ],
-                            }],
-                            "max_tokens": 4096,
-                            "temperature": 0.3,
-                        },
-                    )
-                    r.raise_for_status()
-                    return r.json()["choices"][0]["message"]["content"]
-            except httpx.HTTPStatusError as e:
-                last_error = f"{name} API error {e.response.status_code}"
-                continue
-            except Exception as e:
-                last_error = f"{name} error: {str(e)[:100]}"
-                continue
-
-        return f"All providers failed. Last: {last_error}"
+        if not self._api_key:
+            return "Error: AI_API_KEY not configured"
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                r = await client.post(
+                    f"{self._base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": self._model,
+                        "messages": [{
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": f"{system}\n\n{prompt}"},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
+                            ],
+                        }],
+                        "max_tokens": 4096,
+                        "temperature": 0.3,
+                    },
+                )
+                r.raise_for_status()
+                return r.json()["choices"][0]["message"]["content"]
+        except httpx.HTTPStatusError as e:
+            return f"LLM API error {e.response.status_code}: {e.response.text[:200]}"
+        except Exception as e:
+            return f"LLM connection error: {str(e)[:200]}"
 
     async def _call_llm_text(self, system: str, user: str) -> str:
-        providers = []
-        if self._groq_key:
-            providers.append(("groq", self._groq_url, self._groq_key, self._groq_model))
-        if self._openai_key:
-            providers.append(("openai", self._openai_url, self._openai_key, self._openai_model))
-
-        if not providers:
-            return "Error: No API keys configured"
-
-        last_error = ""
-        for name, base_url, api_key, model in providers:
-            try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    r = await client.post(
-                        f"{base_url}/chat/completions",
-                        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                        json={
-                            "model": model,
-                            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                            "max_tokens": 4096,
-                            "temperature": 0.3,
-                        },
-                    )
-                    r.raise_for_status()
-                    return r.json()["choices"][0]["message"]["content"]
-            except httpx.HTTPStatusError as e:
-                last_error = f"{name} API error {e.response.status_code}"
-                continue
-            except Exception as e:
-                last_error = f"{name} error: {str(e)[:100]}"
-                continue
-
-        return f"All providers failed. Last: {last_error}"
+        if not self._api_key:
+            return "Error: AI_API_KEY not configured"
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                r = await client.post(
+                    f"{self._base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": self._model,
+                        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                        "max_tokens": 4096,
+                        "temperature": 0.3,
+                    },
+                )
+                r.raise_for_status()
+                return r.json()["choices"][0]["message"]["content"]
+        except httpx.HTTPStatusError as e:
+            return f"LLM API error {e.response.status_code}: {e.response.text[:200]}"
+        except Exception as e:
+            return f"LLM connection error: {str(e)[:200]}"
 
     def _load_b64(self, path: str = "", b64: str = "") -> str:
         if b64:

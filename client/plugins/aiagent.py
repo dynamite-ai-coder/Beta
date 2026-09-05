@@ -21,16 +21,17 @@ PROVIDERS = {
         "name": "Groq",
         "base_url": "https://api.groq.com/openai/v1",
         "env_key": "GROQ_API_KEY",
-        "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768",
-                    "gemma2-9b-it", "meta-llama/llama-4-scout-17b-16e-instruct"],
+        "models": ["openai/gpt-oss-120b", "qwen/qwen3.6-27b", "qwen/qwen3.8-27b",
+                    "allam-2-7b", "groq/compound-mini"],
         "free_tier": True,
     },
     "openai": {
         "name": "OpenAI",
         "base_url": "https://api.openai.com/v1",
         "env_key": "OPENAI_API_KEY",
-        "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo", "o1-preview", "o1-mini"],
+        "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
         "free_tier": False,
+        "enabled": False,
     },
     "anthropic": {
         "name": "Anthropic",
@@ -247,32 +248,29 @@ class Plugin(PluginBase):
         env = self._env
         rec = {"environment": env["platform"], "ram_mb": env["ram_mb"]}
 
-        has_openai = bool(os.environ.get("OPENAI_API_KEY", ""))
-        has_groq = bool(os.environ.get("AI_API_KEY", "") or os.environ.get("GROQ_API_KEY", ""))
-
         if env["is_termux"] or env["ram_mb"] < 4000:
             rec["recommendation"] = {
-                "provider": "openai" if has_openai else "groq",
-                "model": "gpt-4o-mini" if has_openai else "llama-3.1-8b-instant",
+                "provider": "groq",
+                "model": "llama-3.1-8b-instant",
                 "reason": f"Termux/Android with {env['ram_mb']}MB RAM.",
-                "alt_provider": "groq" if has_openai else "openai",
-                "alt_model": "llama-3.1-8b-instant" if has_openai else "gpt-4o-mini",
+                "alt_provider": "groq",
+                "alt_model": "llama-3.3-70b-versatile",
             }
         elif env["ram_mb"] < 8000:
             rec["recommendation"] = {
-                "provider": "openai" if has_openai else "groq",
-                "model": "gpt-4o-mini" if has_openai else "llama-3.1-8b-instant",
-                "reason": f"{env['ram_mb']}MB RAM. OpenAI gpt-4o-mini for quality, Groq for speed.",
+                "provider": "groq",
+                "model": "llama-3.1-8b-instant",
+                "reason": f"{env['ram_mb']}MB RAM. Free Groq API for fast inference.",
                 "alt_provider": "groq",
                 "alt_model": "llama-3.3-70b-versatile",
             }
         else:
             rec["recommendation"] = {
-                "provider": "openai" if has_openai else "groq",
-                "model": "gpt-4o" if has_openai else "llama-3.3-70b-versatile",
-                "reason": f"{env['ram_mb']}MB RAM. OpenAI for quality, Groq for free fast inference.",
-                "alt_provider": "groq" if has_openai else "openai",
-                "alt_model": "llama-3.3-70b-versatile" if has_openai else "gpt-4o",
+                "provider": "groq",
+                "model": "llama-3.3-70b-versatile",
+                "reason": f"{env['ram_mb']}MB RAM. Groq 70B for best quality.",
+                "alt_provider": "groq",
+                "alt_model": "llama-3.1-8b-instant",
             }
 
         return rec

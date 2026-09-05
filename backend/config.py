@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # AI (legacy single-agent - still used as fallback)
     ai_api_key: str = ""
-    ai_model: str = "llama-3.1-8b-instant"
+    ai_model: str = "openai/gpt-oss-120b"
     ai_base_url: str = "https://api.groq.com/openai/v1"
     ai_provider: str = "groq"
 
@@ -30,23 +30,23 @@ class Settings(BaseSettings):
 
     # Multi-agent Groq configuration
     groq_agent_1_api_key: str = ""
-    groq_agent_1_model: str = "llama-3.1-8b-instant"
+    groq_agent_1_model: str = "openai/gpt-oss-120b"
     groq_agent_1_base_url: str = "https://api.groq.com/openai/v1"
 
     groq_agent_2_api_key: str = ""
-    groq_agent_2_model: str = "llama-3.1-8b-instant"
+    groq_agent_2_model: str = "qwen/qwen3.6-27b"
     groq_agent_2_base_url: str = "https://api.groq.com/openai/v1"
 
     groq_agent_3_api_key: str = ""
-    groq_agent_3_model: str = "llama-3.1-8b-instant"
+    groq_agent_3_model: str = "allam-2-7b"
     groq_agent_3_base_url: str = "https://api.groq.com/openai/v1"
 
     groq_agent_4_api_key: str = ""
-    groq_agent_4_model: str = "llama-3.1-8b-instant"
+    groq_agent_4_model: str = "qwen/qwen3.8-27b"
     groq_agent_4_base_url: str = "https://api.groq.com/openai/v1"
 
     groq_agent_5_api_key: str = ""
-    groq_agent_5_model: str = "llama-3.1-8b-instant"
+    groq_agent_5_model: str = "openai/gpt-oss-20b"
     groq_agent_5_base_url: str = "https://api.groq.com/openai/v1"
 
     # Database
@@ -125,10 +125,10 @@ class Settings(BaseSettings):
         if not self.beta_api_key:
             self.beta_api_key = os.environ.get("BETA_API_KEY", self.api_auth_token)
 
-        if self.ai_model == "llama-3.1-8b-instant":
-            groq_model = os.environ.get("GROQ_MODEL")
-            if groq_model:
-                self.ai_model = groq_model
+        # Allow env var to override default model
+        env_groq_model = os.environ.get("AI_MODEL", "")
+        if env_groq_model:
+            self.ai_model = env_groq_model
 
         agent_keys = [
             "groq_agent_1_api_key", "groq_agent_2_api_key",
@@ -142,18 +142,14 @@ class Settings(BaseSettings):
                 setattr(self, key, os.environ.get(env_key, self.ai_api_key))
             env_model = f"GROQ_AGENT_{i}_MODEL"
             model_key = f"groq_agent_{i}_model"
-            model_val = getattr(self, model_key)
-            if model_val == "llama-3.1-8b-instant":
-                env_m = os.environ.get(env_model)
-                if env_m:
-                    setattr(self, model_key, env_m)
+            env_m = os.environ.get(env_model)
+            if env_m:
+                setattr(self, model_key, env_m)
             env_url = f"GROQ_AGENT_{i}_BASE_URL"
             url_key = f"groq_agent_{i}_base_url"
-            url_val = getattr(self, url_key)
-            if url_val == "https://api.groq.com/openai/v1":
-                env_u = os.environ.get(env_url)
-                if env_u:
-                    setattr(self, url_key, env_u)
+            env_u = os.environ.get(env_url)
+            if env_u:
+                setattr(self, url_key, env_u)
 
     def get_agent_config(self, agent_number: int) -> dict[str, str]:
         return {

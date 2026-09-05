@@ -56,7 +56,7 @@ if [ ! -f .env ] || [ ! -s .env ]; then
     cp .env.example .env 2>/dev/null || cat > .env << 'ENVEOF'
 # AI / Groq Free Tier
 AI_API_KEY=
-AI_MODEL=llama-3.3-70b-versatile
+AI_MODEL=openai/gpt-oss-120b
 AI_BASE_URL=https://api.groq.com/openai/v1
 AI_PROVIDER=groq
 

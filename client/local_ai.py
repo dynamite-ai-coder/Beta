@@ -288,22 +288,14 @@ async def _load_model() -> bool:
 
 
 async def _cloud_preprocess(message: str, file_context: str = "") -> str:
-    openai_key = os.environ.get("OPENAI_API_KEY", "")
-    groq_key = os.environ.get("AI_API_KEY", "") or os.environ.get("GROQ_API_KEY", "")
-
-    if not openai_key and not groq_key:
+    api_key = os.environ.get("AI_API_KEY", "")
+    if not api_key:
         return ""
 
     try:
         import httpx as _httpx
-        if openai_key:
-            base_url = "https://api.openai.com/v1"
-            api_key = openai_key
-            model = "gpt-4o-mini"
-        else:
-            base_url = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1")
-            api_key = groq_key
-            model = os.environ.get("AI_MODEL", "llama-3.1-8b-instant")
+        base_url = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1")
+        model = os.environ.get("AI_MODEL", "llama-3.1-8b-instant")
 
         system = (
             "You are a prompt preprocessor. Improve this user prompt for an AI assistant.\n"
@@ -450,8 +442,7 @@ def get_status() -> dict:
     rec = env["recommended_config"]
     model_path = _get_model_path()
 
-    openai_key = os.environ.get("OPENAI_API_KEY", "")
-    groq_key = os.environ.get("AI_API_KEY", "") or os.environ.get("GROQ_API_KEY", "")
+    groq_key = os.environ.get("AI_API_KEY", "")
 
     return {
         "enabled": os.environ.get("LOCAL_AI_ENABLED", "false").lower() == "true",
@@ -465,7 +456,6 @@ def get_status() -> dict:
         "context_size": int(os.environ.get("LOCAL_AI_CONTEXT", str(rec["n_ctx"]))),
         "max_tokens": int(os.environ.get("LOCAL_AI_MAX_TOKENS", "256")),
         "threads": int(os.environ.get("LOCAL_AI_THREADS", str(rec["n_threads"]))),
-        "openai_configured": bool(openai_key),
         "groq_configured": bool(groq_key),
-        "cloud_preprocessor": "openai" if openai_key else ("groq" if groq_key else "none"),
+        "cloud_preprocessor": "groq" if groq_key else "none",
     }
