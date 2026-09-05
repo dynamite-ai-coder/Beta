@@ -894,3 +894,37 @@ async def ab_delete(test_id: str) -> dict:
     from backend.ai.ab_testing import ab_manager
     ok = ab_manager.delete(test_id)
     return {"deleted": ok}
+
+
+@router.post(
+    "/webhooks/register",
+    dependencies=[Depends(verify_api_key)],
+)
+async def webhook_register(request: Request) -> dict:
+    from backend.monitoring.webhooks import webhook_manager
+    body = await request.json()
+    wh = webhook_manager.register(
+        url=body.get("url", ""),
+        events=body.get("events"),
+        secret=body.get("secret", ""),
+    )
+    return {"id": wh.id, "url": wh.url}
+
+
+@router.get(
+    "/webhooks",
+    dependencies=[Depends(verify_api_key)],
+)
+async def webhook_list() -> dict:
+    from backend.monitoring.webhooks import webhook_manager
+    return {"webhooks": webhook_manager.list_all()}
+
+
+@router.post(
+    "/webhooks/delete/{webhook_id}",
+    dependencies=[Depends(verify_api_key)],
+)
+async def webhook_delete(webhook_id: str) -> dict:
+    from backend.monitoring.webhooks import webhook_manager
+    ok = webhook_manager.unregister(webhook_id)
+    return {"deleted": ok}
