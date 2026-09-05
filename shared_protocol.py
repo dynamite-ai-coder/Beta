@@ -68,8 +68,8 @@ class ProtocolMsg:
     def decode(cls, raw: str) -> "ProtocolMsg":
         try:
             data = base64.b85decode(raw.encode("ascii"))
-            t, _, id_, _, ref = struct.unpack(">BBHBB", data[:5])
-            body = json.loads(data[5:].decode("utf-8"))
+            t, _, id_, _, ref = struct.unpack(">BBHBB", data[:6])
+            body = json.loads(data[6:].decode("utf-8"))
             return cls(type=t, id=id_, ref=ref, payload=body)
         except Exception:
             return cls(type=0, payload={"raw": raw})
