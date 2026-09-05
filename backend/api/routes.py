@@ -859,3 +859,38 @@ async def batch_cancel(task_id: str) -> dict:
 async def batch_stats() -> dict:
     from backend.tasks.batch import batch_queue
     return batch_queue.stats
+
+
+@router.post(
+    "/ab/create",
+    dependencies=[Depends(verify_api_key)],
+)
+async def ab_create(request: Request) -> dict:
+    from backend.ai.ab_testing import ab_manager
+    body = await request.json()
+    test = ab_manager.create(
+        name=body.get("name", "unnamed"),
+        model_a=body.get("model_a", ""),
+        model_b=body.get("model_b", ""),
+        split=body.get("split", 0.5),
+    )
+    return test.get_stats()
+
+
+@router.get(
+    "/ab/tests",
+    dependencies=[Depends(verify_api_key)],
+)
+async def ab_list() -> dict:
+    from backend.ai.ab_testing import ab_manager
+    return {"tests": ab_manager.list_all()}
+
+
+@router.post(
+    "/ab/delete/{test_id}",
+    dependencies=[Depends(verify_api_key)],
+)
+async def ab_delete(test_id: str) -> dict:
+    from backend.ai.ab_testing import ab_manager
+    ok = ab_manager.delete(test_id)
+    return {"deleted": ok}
