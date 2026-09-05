@@ -3,7 +3,6 @@ services:
     name: Beta
     runtime: docker
     plan: free
-    dockerfilePath: ./Dockerfile
     envVars:
       - key: RENDER_API_KEY
         value: rnd_HzODDgruSZ1SPdWpJHwLsJgLiqjB
@@ -87,11 +86,9 @@ services:
         value: "http://beta-localai:8100"
 
   - type: web
-    name: Beta-LocalAI
+    name: beta-localai
     runtime: docker
     plan: starter
-    cpu: 2
-    memory: 8192
     dockerfilePath: ./Dockerfile.local-ai
     envVars:
       - key: LOCAL_AI_ENABLED
