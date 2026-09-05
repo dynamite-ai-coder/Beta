@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
+import time
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from urllib.parse import urljoin
 
 import httpx
 from fastapi import FastAPI, Request
@@ -37,19 +38,29 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 task_manager = TaskManager()
+proxy_client: httpx.AsyncClient | None = None
+_status_cache: dict = {"data": None, "time": 0.0}
+_status_cache_lock = __import__("asyncio").Lock()
+STATUS_CACHE_TTL = 5.0
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global proxy_client
     logger.info("Starting Browser Automation API")
     os.makedirs(settings.img_dir, exist_ok=True)
     await init_db()
+    proxy_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(30.0),
+        limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+    )
     app.state.task_manager = task_manager
     await scheduler.start(task_manager)
     yield
     logger.info("Shutting down Browser Automation API")
     await scheduler.stop()
     await task_manager.cleanup_all()
+    await proxy_client.aclose()
 
 
 app = FastAPI(
@@ -75,6 +86,23 @@ app.middleware("http")(rate_limit_middleware)
 app.middleware("http")(metrics_middleware)
 if not settings.debug:
     app.middleware("http")(https_redirect_middleware)
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    request.state.request_id = str(uuid.uuid4())
+    start = time.monotonic()
+    response = await call_next(request)
+    duration_ms = (time.monotonic() - start) * 1000
+    response.headers["X-Request-ID"] = request.state.request_id
+    logger.info(
+        "%s %s %.2fms %s",
+        request.method,
+        request.url.path,
+        duration_ms,
+        request.state.request_id,
+    )
+    return response
 
 app.include_router(router, prefix="/api/v1")
 app.include_router(ai_router, prefix="/v1")
@@ -148,12 +176,22 @@ async def _proxy_request(
     body = await request.body()
     headers = dict(request.headers)
     headers.pop("host", None)
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.request(
+    try:
+        resp = await proxy_client.request(
             method=request.method,
             url=target,
             headers=headers,
             content=body if body else None,
+        )
+    except httpx.ConnectError:
+        return JSONResponse(
+            status_code=502,
+            content={"detail": "Client service unavailable"},
+        )
+    except httpx.TimeoutException:
+        return JSONResponse(
+            status_code=504,
+            content={"detail": "Client service timeout"},
         )
     excluded = {
         "content-encoding",
@@ -187,6 +225,20 @@ async def proxy_ui(request: Request, path: str = ""):
 )
 async def proxy_client_api(request: Request, path: str = ""):
     req_path = f"/{path}"
+    if req_path == "/api/status":
+        now = time.monotonic()
+        async with _status_cache_lock:
+            if _status_cache["data"] and now - _status_cache["time"] < STATUS_CACHE_TTL:
+                return Response(
+                    content=_status_cache["data"],
+                    media_type="application/json",
+                )
+        resp = await _proxy_request(request, f"{CLIENT_URL}/{path}")
+        if resp.status_code == 200:
+            async with _status_cache_lock:
+                _status_cache["data"] = resp.body
+                _status_cache["time"] = time.monotonic()
+        return resp
     if any(req_path.startswith(p) for p in CLIENT_PATHS):
         return await _proxy_request(request, f"{CLIENT_URL}/{path}")
     return JSONResponse(
