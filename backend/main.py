@@ -125,6 +125,17 @@ DASHBOARD_NOT_FOUND = (
     "<p>Dashboard not found.</p>"
 )
 
+ui_dir = os.path.join(os.path.dirname(__file__), "ui", "templates")
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_ui() -> HTMLResponse:
+    dashboard_path = os.path.join(ui_dir, "dashboard.html")
+    if os.path.exists(dashboard_path):
+        with open(dashboard_path) as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse(content=DASHBOARD_NOT_FOUND)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard() -> HTMLResponse:
