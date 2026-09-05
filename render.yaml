@@ -3,6 +3,7 @@ services:
     name: Beta
     runtime: docker
     plan: free
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: RENDER_API_KEY
         value: rnd_HzODDgruSZ1SPdWpJHwLsJgLiqjB
@@ -72,7 +73,6 @@ services:
         generateValue: true
       - key: DEBUG
         value: "false"
-      # Client config
       - key: BACKEND_URL
         value: "http://localhost:8000"
       - key: LOCAL_UI_HOST
@@ -81,14 +81,11 @@ services:
         value: "23400"
       - key: BROWSER_HEADLESS
         value: "true"
-      # ngrok tunnel
       - key: NGROK_AUTH_TOKEN
         sync: false
-      # Remote local AI server (Beta-LocalAI service)
       - key: LOCAL_AI_URL
         value: "http://beta-localai:8100"
 
-  # --- Nowy webservice: lokalny 2B AI preprocessor (2 CPU, 8GB RAM) ---
   - type: web
     name: Beta-LocalAI
     runtime: docker

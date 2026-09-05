@@ -3,7 +3,6 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install Chromium + ChromeDriver + Tor + ngrok deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
@@ -24,17 +23,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tor \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chromium
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     chromium-driver \
     && rm -rf /var/lib/apt/lists/*
 
-# Install ngrok
 RUN curl -sSL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz | tar -xz -C /usr/local/bin/
 
-# Verify installations
-RUN chromium --version && chromedriver --version && tor --version && ngrok version || true
+RUN chromium --version && chromedriver --version && ngrok version || true
 
 WORKDIR /app
 COPY requirements.txt client-requirements.txt ./
@@ -50,6 +46,8 @@ ENV MALLOC_MMAP_THRESHOLD_=65536
 ENV MALLOC_MMAP_MAX_=0
 ENV BROWSER_HEADLESS=true
 ENV USE_TOR=false
+ENV LOCAL_UI_HOST=0.0.0.0
+ENV LOCAL_UI_PORT=23400
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
