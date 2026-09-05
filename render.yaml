@@ -84,6 +84,35 @@ services:
       # ngrok tunnel
       - key: NGROK_AUTH_TOKEN
         sync: false
+      # Remote local AI server (Beta-LocalAI service)
+      - key: LOCAL_AI_URL
+        value: "http://beta-localai:8100"
+
+  # --- Nowy webservice: lokalny 2B AI preprocessor (2 CPU, 8GB RAM) ---
+  - type: web
+    name: Beta-LocalAI
+    runtime: docker
+    plan: starter
+    cpu: 2
+    memory: 8192
+    dockerfilePath: ./Dockerfile.local-ai
+    envVars:
+      - key: LOCAL_AI_ENABLED
+        value: "true"
+      - key: LOCAL_AI_MODEL
+        value: "/app/models/gemma-2b-it-q4_k_m.gguf"
+      - key: LOCAL_AI_CONTEXT
+        value: "2048"
+      - key: LOCAL_AI_MAX_TOKENS
+        value: "512"
+      - key: LOCAL_AI_THREADS
+        value: "4"
+      - key: LOCAL_AI_PORT
+        value: "8100"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PYTHONDONTWRITEBYTECODE
+        value: "1"
 
 databases:
   - name: Beta-db

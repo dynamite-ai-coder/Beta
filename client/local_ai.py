@@ -287,6 +287,28 @@ async def _load_model() -> bool:
         return False
 
 
+async def _remote_local_ai_preprocess(message: str, file_context: str = "") -> str:
+    """Call the remote Beta-LocalAI service (Gemma 2B on Render)."""
+    local_ai_url = os.environ.get("LOCAL_AI_URL", "")
+    if not local_ai_url:
+        return ""
+
+    try:
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                f"{local_ai_url}/v1/preprocess",
+                json={"message": message, "file_context": file_context},
+            )
+            r.raise_for_status()
+            data = r.json()
+            if data.get("used_local_ai") and data.get("processed"):
+                return data["processed"]
+    except Exception as e:
+        logger.debug("Remote local AI failed: %s", e)
+    return ""
+
+
 async def _cloud_preprocess(message: str, file_context: str = "") -> str:
     api_key = os.environ.get("AI_API_KEY", "")
     if not api_key:
@@ -377,6 +399,22 @@ def preprocess_prompt(message: str, file_context: str = "") -> tuple[str, str]:
     if not _is_complex_request(message, file_context):
         return message, ""
 
+    # 1. Try remote local AI server (Beta-LocalAI on Render)
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, _remote_local_ai_preprocess(message, file_context))
+                result = future.result(timeout=15)
+        else:
+            result = loop.run_until_complete(_remote_local_ai_preprocess(message, file_context))
+        if result and result != message:
+            return message, result
+    except Exception:
+        pass
+
+    # 2. Try local llama.cpp model
     if not _model_loaded:
         import concurrent.futures
         try:
@@ -396,6 +434,7 @@ def preprocess_prompt(message: str, file_context: str = "") -> tuple[str, str]:
             return message, processed
         return message, ""
 
+    # 3. Fallback to cloud (Groq)
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -418,6 +457,12 @@ async def preprocess_prompt_async(message: str, file_context: str = "") -> tuple
     if not _is_complex_request(message, file_context):
         return message, ""
 
+    # 1. Try remote local AI server (Beta-LocalAI on Render)
+    result = await _remote_local_ai_preprocess(message, file_context)
+    if result and result != message:
+        return message, result
+
+    # 2. Try local llama.cpp model
     if not _model_loaded:
         await _load_model()
 
@@ -427,6 +472,7 @@ async def preprocess_prompt_async(message: str, file_context: str = "") -> tuple
             return message, processed
         return message, ""
 
+    # 3. Fallback to cloud (Groq)
     result = await _cloud_preprocess(message, file_context)
     if result and result != message:
         return message, result
@@ -443,6 +489,7 @@ def get_status() -> dict:
     model_path = _get_model_path()
 
     groq_key = os.environ.get("AI_API_KEY", "")
+    local_ai_url = os.environ.get("LOCAL_AI_URL", "")
 
     return {
         "enabled": os.environ.get("LOCAL_AI_ENABLED", "false").lower() == "true",
@@ -458,4 +505,6 @@ def get_status() -> dict:
         "threads": int(os.environ.get("LOCAL_AI_THREADS", str(rec["n_threads"]))),
         "groq_configured": bool(groq_key),
         "cloud_preprocessor": "groq" if groq_key else "none",
+        "remote_local_ai_url": local_ai_url,
+        "remote_local_ai_configured": bool(local_ai_url),
     }
