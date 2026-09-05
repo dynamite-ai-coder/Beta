@@ -794,10 +794,22 @@ async def ai_stats() -> dict:
     from backend.ai.llm_provider import key_pool
     from backend.ai.cache import response_cache
     from backend.monitoring.rate_monitor import rate_monitor
+    from backend.monitoring.agent_logger import agent_logger
     return {
         "orchestrator": orchestrator.stats,
         "keys_loaded": key_pool.count,
         "active_workflows": orchestrator._active_workflows,
         "cache": response_cache.stats,
         "rate_limit": rate_monitor.get_stats(),
+        "agents": agent_logger.get_agent_stats(),
+        "summary": agent_logger.get_summary(),
     }
+
+
+@router.get(
+    "/ai/logs",
+    dependencies=[Depends(verify_api_key)],
+)
+async def ai_logs(count: int = 50, agent: str = None) -> dict:
+    from backend.monitoring.agent_logger import agent_logger
+    return {"logs": agent_logger.get_recent(count, agent)}

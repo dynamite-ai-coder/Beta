@@ -13,6 +13,7 @@ from backend.ai.cache import response_cache
 from backend.ai.models import AgentOutput
 from backend.config import settings
 from backend.monitoring.rate_monitor import rate_monitor
+from backend.monitoring.agent_logger import agent_logger
 
 logger = logging.getLogger(__name__)
 
@@ -87,13 +88,22 @@ class GroqAgentProvider:
 
         cached = response_cache.get(self.role.value, messages, self.model)
         if cached:
-            logger.debug("Cache hit for %s", self.role.value)
+            duration_ms = (time.monotonic() - start) * 1000
+            agent_logger.log(
+                agent=self.role.value, task_id="cache",
+                duration_ms=duration_ms, success=True,
+                tokens=cached.get("tokens", 0),
+                confidence=cached.get("confidence", 0.7),
+                input_preview=user_message[:100],
+                output_preview=cached.get("raw", "")[:200],
+                cached=True,
+            )
             return AgentOutput(
                 agent=self.role, raw_response=cached.get("raw", ""),
                 parsed=cached.get("parsed", {}), success=True,
                 confidence=cached.get("confidence", 0.7),
                 tokens_used=cached.get("tokens", 0),
-                duration_ms=(time.monotonic() - start) * 1000,
+                duration_ms=duration_ms,
             )
 
         last_error = None
@@ -114,6 +124,13 @@ class GroqAgentProvider:
                         "tokens": result.tokens_used,
                     }, self.model)
                     result.duration_ms = (time.monotonic() - start) * 1000
+                    agent_logger.log(
+                        agent=self.role.value, task_id="workflow",
+                        duration_ms=result.duration_ms, success=True,
+                        tokens=result.tokens_used, confidence=result.confidence,
+                        input_preview=user_message[:100],
+                        output_preview=result.raw_response[:200],
+                    )
                     return result
 
                 last_error = result.error
@@ -128,6 +145,12 @@ class GroqAgentProvider:
 
                 rate_monitor.record_error(key)
                 result.duration_ms = (time.monotonic() - start) * 1000
+                agent_logger.log(
+                    agent=self.role.value, task_id="workflow",
+                    duration_ms=result.duration_ms, success=False,
+                    error=result.error or "Unknown error",
+                    input_preview=user_message[:100],
+                )
                 return result
 
             except Exception as e:
