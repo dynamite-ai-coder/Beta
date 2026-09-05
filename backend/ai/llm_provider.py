@@ -26,9 +26,12 @@ MAX_DELAY = 30.0
 class KeyPool:
     def __init__(self) -> None:
         self._keys: list[str] = []
+        self._backup_keys: list[str] = []
         self._last_used: dict[str, float] = {}
+        self._fail_count: dict[str, int] = {}
         self._lock = asyncio.Lock()
         self._min_interval = 3.0
+        self._max_failures = 5
 
     def load(self) -> None:
         seen = set()
@@ -37,11 +40,18 @@ class KeyPool:
             if key and key not in seen:
                 self._keys.append(key)
                 self._last_used[key] = 0.0
+                self._fail_count[key] = 0
                 seen.add(key)
         if settings.ai_api_key and settings.ai_api_key not in seen:
             self._keys.append(settings.ai_api_key)
             self._last_used[settings.ai_api_key] = 0.0
-        logger.info(f"Key pool loaded: {len(self._keys)} keys")
+            self._fail_count[settings.ai_api_key] = 0
+        for i in range(1, 4):
+            bk = getattr(settings, f"groq_backup_{i}_api_key", "")
+            if bk and bk not in seen:
+                self._backup_keys.append(bk)
+                seen.add(bk)
+        logger.info("Key pool loaded: %d primary, %d backup", len(self._keys), len(self._backup_keys))
 
     async def acquire(self) -> str | None:
         async with self._lock:
@@ -49,11 +59,20 @@ class KeyPool:
             best_key = None
             best_wait = float("inf")
             for key in self._keys:
+                if self._fail_count.get(key, 0) >= self._max_failures:
+                    continue
                 elapsed = now - self._last_used[key]
                 wait = max(0.0, self._min_interval - elapsed)
                 if wait < best_wait:
                     best_wait = wait
                     best_key = key
+            if not best_key and self._backup_keys:
+                backup = self._backup_keys.pop(0)
+                self._keys.append(backup)
+                self._last_used[backup] = 0.0
+                self._fail_count[backup] = 0
+                best_key = backup
+                logger.info("Rotated in backup key, pool: %d", len(self._keys))
             if best_key and best_wait > 0:
                 self._lock.release()
                 await asyncio.sleep(best_wait)
@@ -64,10 +83,33 @@ class KeyPool:
 
     def mark_used(self, key: str) -> None:
         self._last_used[key] = time.monotonic()
+        self._fail_count[key] = 0
+
+    def mark_failed(self, key: str) -> None:
+        self._fail_count[key] = self._fail_count.get(key, 0) + 1
+        if self._fail_count[key] >= self._max_failures:
+            logger.warning("Key ...%s exhausted (%d failures), rotating", key[-6:], self._fail_count[key])
 
     @property
     def count(self) -> int:
         return len(self._keys)
+
+    @property
+    def backup_count(self) -> int:
+        return len(self._backup_keys)
+
+    def get_stats(self) -> dict:
+        return {
+            "primary_keys": len(self._keys),
+            "backup_keys": len(self._backup_keys),
+            "key_health": {
+                f"...{k[-6:]}": {
+                    "failures": self._fail_count.get(k, 0),
+                    "healthy": self._fail_count.get(k, 0) < self._max_failures,
+                }
+                for k in self._keys
+            },
+        }
 
 
 key_pool = KeyPool()
@@ -152,6 +194,7 @@ class GroqAgentProvider:
                 if result.error and "Rate limited" in result.error:
                     rate_monitor.record_error(key, is_rate_limit=True)
                     health_monitor.record_failure(self.role.value)
+                    key_pool.mark_failed(key)
                     logger.warning(
                         f"Agent {self.role.value} rate limited on key...{key[-6:]}, "
                         f"retry {attempt + 1}/{MAX_RETRIES} in {delay:.1f}s"
@@ -161,6 +204,7 @@ class GroqAgentProvider:
 
                 rate_monitor.record_error(key)
                 health_monitor.record_failure(self.role.value)
+                key_pool.mark_failed(key)
                 result.duration_ms = (time.monotonic() - start) * 1000
                 agent_logger.log(
                     agent=self.role.value, task_id="workflow",

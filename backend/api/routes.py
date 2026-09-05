@@ -798,7 +798,7 @@ async def ai_stats() -> dict:
     from backend.monitoring.health_monitor import health_monitor
     return {
         "orchestrator": orchestrator.stats,
-        "keys_loaded": key_pool.count,
+        "keys": key_pool.get_stats(),
         "active_workflows": orchestrator._active_workflows,
         "cache": response_cache.stats,
         "rate_limit": rate_monitor.get_stats(),
