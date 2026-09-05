@@ -108,7 +108,33 @@ class AIOrchestrator:
 
         for round_num in range(ctx.max_deliberation_rounds):
             ctx.deliberation_round = round_num + 1
-            if not decision.skip_critic:
+            if not decision.skip_critic and AgentRole.JUDGE in decision.agents:
+                critic_task = self._run_agent(AgentRole.CRITIC, ctx)
+                judge_task = self._run_agent(AgentRole.JUDGE, ctx)
+                critic_output, judge_output = await asyncio.gather(critic_task, judge_task)
+
+                ctx.agent_outputs["critic"] = critic_output
+                ctx.agent_outputs["judge"] = judge_output
+
+                if judge_output.success:
+                    ctx.final_answer = judge_output.raw_response
+
+                if critic_output.success:
+                    parsed = critic_output.parsed
+                    if parsed.get("approved", True):
+                        break
+                    issues = parsed.get("issues", [])
+                    for issue in issues:
+                        ctx.errors.append(
+                            f"[{issue.get('severity', 'low')}] {issue.get('description', '')}"
+                        )
+                    if round_num < ctx.max_deliberation_rounds - 1:
+                        solver_output = await self._run_agent(AgentRole.SOLVER, ctx)
+                        ctx.agent_outputs["solver"] = solver_output
+                else:
+                    logger.warning(f"Critic failed: {critic_output.error}")
+                    break
+            elif not decision.skip_critic:
                 critic_output = await self._run_agent(AgentRole.CRITIC, ctx)
                 ctx.agent_outputs["critic"] = critic_output
 
@@ -127,17 +153,24 @@ class AIOrchestrator:
                 else:
                     logger.warning(f"Critic failed: {critic_output.error}")
                     break
+            elif AgentRole.JUDGE in decision.agents:
+                judge_output = await self._run_agent(AgentRole.JUDGE, ctx)
+                ctx.agent_outputs["judge"] = judge_output
+                if judge_output.success:
+                    ctx.final_answer = judge_output.raw_response
+                break
 
-        if AgentRole.JUDGE in decision.agents:
-            judge_output = await self._run_agent(AgentRole.JUDGE, ctx)
-            ctx.agent_outputs["judge"] = judge_output
-            if judge_output.success:
-                ctx.final_answer = judge_output.raw_response
+        if AgentRole.JUDGE not in ctx.agent_outputs:
+            if AgentRole.JUDGE in decision.agents:
+                judge_output = await self._run_agent(AgentRole.JUDGE, ctx)
+                ctx.agent_outputs["judge"] = judge_output
+                if judge_output.success:
+                    ctx.final_answer = judge_output.raw_response
+                else:
+                    logger.warning(f"Judge failed: {judge_output.error}")
+                    ctx.final_answer = self._build_fallback_answer(ctx)
             else:
-                logger.warning(f"Judge failed: {judge_output.error}")
                 ctx.final_answer = self._build_fallback_answer(ctx)
-        else:
-            ctx.final_answer = self._build_fallback_answer(ctx)
 
         ctx.state = "completed"
         latency_ms = (time.monotonic() - workflow_start) * 1000
