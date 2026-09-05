@@ -71,11 +71,23 @@ class LocalUI:
         @app.route("/api/status")
         def status():
             browser_ok = self._browser_worker is not None and self._browser_worker.is_ready if self._browser_worker else False
+            ngrok_url = None
+            try:
+                with httpx.Client(timeout=3.0) as c:
+                    r = c.get("http://localhost:4040/api/tunnels")
+                    tunnels = r.json().get("tunnels", [])
+                    for t in tunnels:
+                        if t.get("proto") == "https":
+                            ngrok_url = t.get("public_url")
+                            break
+            except Exception:
+                pass
             return jsonify({
                 "browser_connected": browser_ok,
                 "ai_connected": True,
                 "task_status": "idle",
                 "client_id": self._config.client_id,
+                "ngrok_url": ngrok_url,
             })
 
         @app.route("/api/chat/history")
@@ -341,6 +353,19 @@ class LocalUI:
         def local_ai_status():
             from client.local_ai import get_status
             return jsonify(get_status())
+
+        @app.route("/api/ngrok")
+        def ngrok_info():
+            try:
+                with httpx.Client(timeout=3.0) as c:
+                    r = c.get("http://localhost:4040/api/tunnels")
+                    tunnels = r.json().get("tunnels", [])
+                    for t in tunnels:
+                        if t.get("proto") == "https":
+                            return jsonify({"url": t["public_url"], "status": "active"})
+            except Exception:
+                pass
+            return jsonify({"url": None, "status": "not running"})
 
         @app.route("/api/run", methods=["POST"])
         def run_command():
