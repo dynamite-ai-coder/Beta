@@ -251,49 +251,45 @@ class LocalUI:
             return {"task_id": None, "state": None}
 
         @app.get("/api/preview/stream")
-        async def preview_stream(task_id: str = "", fps: int = 15):
-            if not task_id:
-                return JSONResponse(status_code=400, content={"error": "task_id required"})
-
+        async def preview_stream(url: str = "", fps: int = 15):
             fps = max(1, min(fps, 30))
             interval = 1.0 / fps
+            target_url = url or "https://example.com"
 
             async def mjpeg_generator():
-                headers = {}
-                if self._config.api_token:
-                    headers["Authorization"] = f"Bearer {self._config.api_token}"
+                from client.plugins.manager import plugin_manager
+                screenshot_plugin = None
+                for p in plugin_manager.plugins:
+                    if p.name == "screenshot":
+                        screenshot_plugin = p
+                        break
 
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    while True:
-                        try:
-                            resp = await client.get(
-                                f"{self._config.backend_url}/v1/browser/screenshot/{task_id}",
-                                headers=headers,
-                            )
-                            if resp.status_code == 200:
-                                data = resp.json()
-                                b64 = data.get("screenshot")
-                                if b64:
-                                    jpeg_bytes = base64.b64decode(b64)
-                                    if _HAS_PIL:
-                                        try:
-                                            img = Image.open(io.BytesIO(jpeg_bytes))
-                                            img = img.resize((320, 240), Image.LANCZOS)
-                                            buf = io.BytesIO()
-                                            img.save(buf, format="JPEG", quality=75, optimize=True)
-                                            jpeg_bytes = buf.getvalue()
-                                        except Exception:
-                                            pass
-                                    yield (
-                                        b"--frame\r\n"
-                                        b"Content-Type: image/jpeg\r\n"
-                                        b"Content-Length: " + str(len(jpeg_bytes)).encode() + b"\r\n\r\n"
-                                        + jpeg_bytes + b"\r\n"
-                                    )
-                        except Exception as e:
-                            logger.debug(f"Stream frame error: {e}")
+                while True:
+                    try:
+                        if screenshot_plugin:
+                            result = await screenshot_plugin.execute(action="capture", url=target_url, width=320, height=220)
+                            b64 = result.get("screenshot", "")
+                            if b64:
+                                jpeg_bytes = base64.b64decode(b64)
+                                if _HAS_PIL:
+                                    try:
+                                        img = Image.open(io.BytesIO(jpeg_bytes))
+                                        img = img.resize((320, 220), Image.LANCZOS)
+                                        buf = io.BytesIO()
+                                        img.save(buf, format="JPEG", quality=70, optimize=True)
+                                        jpeg_bytes = buf.getvalue()
+                                    except Exception:
+                                        pass
+                                yield (
+                                    b"--frame\r\n"
+                                    b"Content-Type: image/jpeg\r\n"
+                                    b"Content-Length: " + str(len(jpeg_bytes)).encode() + b"\r\n\r\n"
+                                    + jpeg_bytes + b"\r\n"
+                                )
+                    except Exception as e:
+                        logger.debug(f"Stream frame error: {e}")
 
-                        await asyncio.sleep(interval)
+                    await asyncio.sleep(interval)
 
             return StreamingResponse(
                 mjpeg_generator(),

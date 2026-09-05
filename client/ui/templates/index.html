@@ -300,19 +300,20 @@
         <div class="preview-header">
             <div class="preview-title"><span class="live-dot"></span>Chromium Live Preview</div>
             <div class="preview-controls">
+                <input type="text" id="preview-url" value="https://example.com" placeholder="URL..." style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:12px;width:180px">
                 <select id="fps-sel" onchange="setPreviewFps(this.value)">
                     <option value="5">5 FPS</option>
                     <option value="10">10 FPS</option>
                     <option value="15" selected>15 FPS</option>
                     <option value="20">20 FPS</option>
-                    <option value="30">30 FPS</option>
                 </select>
-                <button class="topbar-btn" onclick="reconnectPreview()">Reconnect</button>
+                <button class="topbar-btn" onclick="startPreviewStream()" style="border-color:var(--green);color:var(--green)">Start</button>
+                <button class="topbar-btn" onclick="stopPreviewStream()">Stop</button>
                 <button class="preview-close" onclick="closePreview()">×</button>
             </div>
         </div>
         <div class="preview-body" id="preview-body">
-            <div class="preview-placeholder" id="preview-placeholder">Click <b>Live Preview</b> to start streaming the browser</div>
+            <div class="preview-placeholder" id="preview-placeholder">Enter URL and click <b>Start</b> to stream (320x220, 15fps)</div>
             <div class="preview-badge" id="preview-badge">LIVE</div>
             <div class="preview-fps" id="preview-fps"></div>
         </div>
@@ -320,7 +321,7 @@
 </div>
 
 <script>
-let fileContext='', isSending=false, currentPlugin=null, previewImg=null, previewFps=15, previewTaskId='';
+let fileContext='', isSending=false, currentPlugin=null, previewImg=null, previewFps=15, previewUrl='https://example.com', previewStreaming=false;
 let frameCount=0, lastFpsTime=Date.now();
 
 const input=document.getElementById('chat-input');
@@ -418,7 +419,6 @@ function getPluginIcon(n){
 /* Preview */
 function openPreview(){
     document.getElementById('preview-overlay').classList.add('active');
-    startPreviewStream();
 }
 function closePreview(){
     document.getElementById('preview-overlay').classList.remove('active');
@@ -427,43 +427,37 @@ function closePreview(){
 
 function startPreviewStream(){
     stopPreviewStream();
+    const url=document.getElementById('preview-url').value.trim()||'https://example.com';
+    previewUrl=url;
+    previewStreaming=true;
     const body=document.getElementById('preview-body');
     const ph=document.getElementById('preview-placeholder');
-    if(!previewTaskId){detectTask()}
-    if(previewTaskId){
-        ph.style.display='none';
-        previewImg=document.createElement('img');
-        previewImg.src='/api/preview/stream?task_id='+encodeURIComponent(previewTaskId)+'&fps='+previewFps;
-        previewImg.onload=function(){
-            document.getElementById('preview-badge').className='preview-badge on';
-            trackPreviewFps();
-        };
-        body.appendChild(previewImg);
-    }
+    ph.style.display='none';
+    previewImg=document.createElement('img');
+    previewImg.style.cssText='width:320px;height:220px;border-radius:4px;border:1px solid var(--border)';
+    previewImg.onload=function(){
+        document.getElementById('preview-badge').className='preview-badge on';
+        trackPreviewFps();
+    };
+    previewImg.src='/api/preview/stream?url='+encodeURIComponent(previewUrl)+'&fps='+previewFps;
+    body.appendChild(previewImg);
 }
 
 function stopPreviewStream(){
+    previewStreaming=false;
     if(previewImg){previewImg.src='';previewImg.remove();previewImg=null}
     document.getElementById('preview-badge').className='preview-badge';
     document.getElementById('preview-fps').textContent='';
+    document.getElementById('preview-placeholder').style.display='block';
 }
 
 function trackPreviewFps(){
     frameCount=0;lastFpsTime=Date.now();
-    const go=()=>{if(!previewImg)return;frameCount++;const n=Date.now();if(n-lastFpsTime>=1000){document.getElementById('preview-fps').textContent=frameCount+' fps';frameCount=0;lastFpsTime=n}requestAnimationFrame(go)};
+    const go=()=>{if(!previewStreaming||!previewImg)return;frameCount++;const n=Date.now();if(n-lastFpsTime>=1000){document.getElementById('preview-fps').textContent=frameCount+' fps';frameCount=0;lastFpsTime=n}requestAnimationFrame(go)};
     requestAnimationFrame(go);
 }
 
-function setPreviewFps(v){previewFps=parseInt(v);if(previewTaskId)startPreviewStream()}
-function reconnectPreview(){startPreviewStream()}
-
-async function detectTask(){
-    try{
-        const r=await fetch('/api/preview/auto_task');
-        const d=await r.json();
-        if(d.task_id){previewTaskId=d.task_id}
-    }catch(e){}
-}
+function setPreviewFps(v){previewFps=parseInt(v);if(previewStreaming)startPreviewStream()}
 
 /* Status + plugins */
 async function checkStatus(){

@@ -1,23 +1,25 @@
 from __future__ import annotations
 
-import asyncio
 import base64
-import io
 import logging
 import os
 import time
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from client.plugins.base import PluginBase
 
 logger = logging.getLogger(__name__)
 
+THUM_IO_API = "https://image.thum.io/get/width/1280/crop/720/"
+
 
 class Plugin(PluginBase):
     name = "screenshot"
-    description = "Capture browser screenshots, save to file, compare pages"
-    version = "1.0.0"
+    description = "Capture browser screenshots via API or selenium"
+    version = "1.1.0"
     author = "Beta"
 
     def __init__(self, config: Any = None) -> None:
@@ -32,158 +34,85 @@ class Plugin(PluginBase):
     async def execute(self, action: str = "capture", **kwargs: Any) -> dict[str, Any]:
         actions = {
             "capture": self._capture,
-            "capture_full": self._capture_full,
+            "capture_url": self._capture_url,
             "save": self._save,
             "list": self._list_screenshots,
             "compare": self._compare,
-            "capture_element": self._capture_element,
         }
         fn = actions.get(action)
         if not fn:
             return {"error": f"Unknown action: {action}", "available": list(actions.keys())}
         return await fn(**kwargs)
 
-    async def _capture(self, name: str = "", quality: int = 80, **kw: Any) -> dict:
-        if not self._browser_worker or not self._browser_worker.is_ready:
-            return {"error": "Browser not ready"}
+    async def _capture(self, url: str = "", name: str = "", width: int = 1280, height: int = 720, **kw: Any) -> dict:
+        if not url:
+            return {"error": "url required"}
 
-        b64 = await self._browser_worker.take_screenshot()
-        if not b64:
-            return {"error": "Screenshot failed"}
+        if self._browser_worker and self._browser_worker.is_ready:
+            try:
+                b64 = await self._browser_worker.take_screenshot()
+                if b64:
+                    ts = int(time.time())
+                    filename = name or f"screen_{ts}.png"
+                    path = self._output_dir / filename
+                    path.write_bytes(base64.b64decode(b64))
+                    return {"screenshot": b64, "path": str(path), "filename": filename, "source": "selenium"}
+            except Exception as e:
+                logger.warning(f"Selenium screenshot failed, using API: {e}")
 
-        ts = int(time.time())
-        filename = name or f"screen_{ts}"
-        if not filename.endswith(".png"):
-            filename += ".png"
+        return await self._capture_url(url=url, name=name, width=width, height=height, **kw)
 
-        path = self._output_dir / filename
-        img_bytes = base64.b64decode(b64)
-        path.write_bytes(img_bytes)
+    async def _capture_url(self, url: str = "", name: str = "", width: int = 1280, height: int = 720, **kw: Any) -> dict:
+        if not url:
+            return {"error": "url required"}
 
-        return {
-            "path": str(path),
-            "filename": filename,
-            "size_bytes": len(img_bytes),
-            "timestamp": ts,
-            "preview": b64[:100] + "...",
-        }
-
-    async def _capture_full(self, name: str = "", **kw: Any) -> dict:
-        if not self._browser_worker or not self._browser_worker.is_ready:
-            return {"error": "Browser not ready"}
-
-        page_source = await self._browser_worker.get_page_source()
-        current_url = await self._browser_worker.get_current_url()
-        b64 = await self._browser_worker.take_screenshot()
-
-        ts = int(time.time())
-        filename = name or f"full_{ts}"
-        if not filename.endswith(".png"):
-            filename += ".png"
-
-        result = {"url": current_url, "timestamp": ts}
-        if b64:
-            path = self._output_dir / filename
-            img_bytes = base64.b64decode(b64)
-            path.write_bytes(img_bytes)
-            result["path"] = str(path)
-            result["filename"] = filename
-            result["size_bytes"] = len(img_bytes)
-
-        if page_source:
-            html_path = self._output_dir / f"{filename}.html"
-            html_path.write_text(page_source[:50000], encoding="utf-8")
-            result["html_path"] = str(html_path)
-
-        return result
+        api_url = f"{THUM_IO_API}{width}/crop/{height}/{url}"
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                resp = await client.get(api_url)
+                if resp.status_code == 200 and len(resp.content) > 1000:
+                    b64 = base64.b64encode(resp.content).decode()
+                    ts = int(time.time())
+                    filename = name or f"screen_{ts}.png"
+                    path = self._output_dir / filename
+                    path.write_bytes(resp.content)
+                    return {
+                        "screenshot": b64,
+                        "path": str(path),
+                        "filename": filename,
+                        "size_bytes": len(resp.content),
+                        "url": url,
+                        "source": "thum.io",
+                    }
+                return {"error": f"Screenshot API returned {resp.status_code}", "url": url}
+        except Exception as e:
+            return {"error": str(e), "url": url}
 
     async def _save(self, b64_data: str = "", name: str = "", **kw: Any) -> dict:
         if not b64_data:
             return {"error": "b64_data required"}
-
         ts = int(time.time())
-        filename = name or f"saved_{ts}"
-        if not filename.endswith(".png"):
-            filename += ".png"
-
+        filename = name or f"saved_{ts}.png"
         path = self._output_dir / filename
-        img_bytes = base64.b64decode(b64_data)
-        path.write_bytes(img_bytes)
-
-        return {"path": str(path), "filename": filename, "size_bytes": len(img_bytes)}
+        path.write_bytes(base64.b64decode(b64_data))
+        return {"path": str(path), "filename": filename, "size_bytes": path.stat().st_size}
 
     async def _list_screenshots(self, limit: int = 20, **kw: Any) -> dict:
         files = sorted(self._output_dir.glob("*.png"), key=lambda f: f.stat().st_mtime, reverse=True)
-        items = []
-        for f in files[:limit]:
-            stat = f.stat()
-            items.append({
-                "filename": f.name,
-                "size_bytes": stat.st_size,
-                "modified": stat.st_mtime,
-            })
-        return {"screenshots": items, "count": len(items), "dir": str(self._output_dir)}
+        items = [{"filename": f.name, "size_bytes": f.stat().st_size} for f in files[:limit]]
+        return {"screenshots": items, "count": len(items)}
 
     async def _compare(self, name_a: str = "", name_b: str = "", **kw: Any) -> dict:
         try:
-            from PIL import Image
             import hashlib
-
             path_a = self._output_dir / name_a
             path_b = self._output_dir / name_b
-
             if not path_a.exists():
                 return {"error": f"File not found: {name_a}"}
             if not path_b.exists():
                 return {"error": f"File not found: {name_b}"}
-
-            img_a = Image.open(path_a)
-            img_b = Image.open(path_b)
-
-            hash_a = hashlib.md5(img_a.tobytes()).hexdigest()
-            hash_b = hashlib.md5(img_b.tobytes()).hexdigest()
-
-            identical = hash_a == hash_b
-
-            diff_info = {}
-            if not identical and img_a.size == img_b.size:
-                from PIL import ImageChops
-                diff = ImageChops.difference(img_a, img_b)
-                bbox = diff.getbbox()
-                if bbox:
-                    diff_info["diff_region"] = {"x": bbox[0], "y": bbox[1],
-                                                 "w": bbox[2] - bbox[0], "h": bbox[3] - bbox[1]}
-                    diff_info["diff_pixels"] = sum(1 for p in diff.getdata() if any(c > 0 for c in p[:3]))
-
-            return {
-                "identical": identical,
-                "hash_a": hash_a, "hash_b": hash_b,
-                "size_a": img_a.size, "size_b": img_b.size,
-                **diff_info,
-            }
-        except ImportError:
-            return {"error": "Pillow required for comparison"}
-
-    async def _capture_element(self, selector: str = "", name: str = "", **kw: Any) -> dict:
-        if not selector:
-            return {"error": "selector required"}
-        if not self._browser_worker or not self._browser_worker.is_ready:
-            return {"error": "Browser not ready"}
-
-        try:
-            from selenium.webdriver.common.by import By
-            driver = self._browser_worker._driver
-            element = driver.find_element(By.CSS_SELECTOR, selector)
-            b64 = element.screenshot_as_base64
-
-            ts = int(time.time())
-            filename = name or f"element_{ts}"
-            if not filename.endswith(".png"):
-                filename += ".png"
-
-            path = self._output_dir / filename
-            path.write_bytes(base64.b64decode(b64))
-
-            return {"path": str(path), "filename": filename, "selector": selector}
+            hash_a = hashlib.md5(path_a.read_bytes()).hexdigest()
+            hash_b = hashlib.md5(path_b.read_bytes()).hexdigest()
+            return {"identical": hash_a == hash_b, "hash_a": hash_a, "hash_b": hash_b}
         except Exception as e:
             return {"error": str(e)}
