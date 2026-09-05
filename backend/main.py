@@ -4,7 +4,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from urllib.parse import urljoin
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (
@@ -121,6 +123,75 @@ async def metrics() -> Response:
     return Response(
         content=get_metrics(),
         media_type="text/plain",
+    )
+
+
+CLIENT_URL = os.environ.get("CLIENT_URL", "http://localhost:23400")
+
+CLIENT_PATHS = (
+    "/api/status",
+    "/api/chat/",
+    "/api/tor/",
+    "/api/upload",
+    "/api/run",
+    "/api/ngrok",
+    "/api/localai/",
+    "/api/plugins",
+    "/api/preview/",
+)
+
+
+async def _proxy_request(
+    request: Request,
+    target: str,
+) -> Response:
+    body = await request.body()
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.request(
+            method=request.method,
+            url=target,
+            headers=headers,
+            content=body if body else None,
+        )
+    excluded = {
+        "content-encoding",
+        "content-length",
+        "transfer-encoding",
+        "connection",
+    }
+    resp_headers = {
+        k: v
+        for k, v in resp.headers.items()
+        if k.lower() not in excluded
+    }
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=resp_headers,
+    )
+
+
+@app.api_route(
+    "/ui/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+)
+async def proxy_ui(request: Request, path: str = ""):
+    return await _proxy_request(request, f"{CLIENT_URL}/{path}")
+
+
+@app.api_route(
+    "/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+)
+async def proxy_client_api(request: Request, path: str = ""):
+    req_path = f"/{path}"
+    if any(req_path.startswith(p) for p in CLIENT_PATHS):
+        return await _proxy_request(request, f"{CLIENT_URL}/{path}")
+    return JSONResponse(
+        status_code=404,
+        content={"detail": "Not found"},
     )
 
 
