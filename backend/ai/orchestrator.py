@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend.ai.agent_roles import AgentRole
-from backend.ai.llm_provider import GroqAgentProvider
+from backend.ai.llm_provider import GroqAgentProvider, key_pool
 from backend.ai.models import (
     AIContext, AgentOutput, VirtualAIRequest, VirtualAIResponse,
     VirtualAIChoice, VirtualAIUsage, BrowserTaskRequest,
@@ -60,24 +60,27 @@ class AIOrchestrator:
 
         logger.info(f"Starting AI workflow {task_id}: {user_message[:80]}...")
 
-        plan_output = await self._run_agent(AgentRole.PLANNER, ctx)
-        ctx.agent_outputs["planner"] = plan_output
-        if plan_output.success:
-            parsed = plan_output.parsed
+        plan_result, researcher_result = await asyncio.gather(
+            self._run_agent(AgentRole.PLANNER, ctx),
+            self._run_agent(AgentRole.RESEARCHER, ctx),
+        )
+
+        ctx.agent_outputs["planner"] = plan_result
+        if plan_result.success:
+            parsed = plan_result.parsed
             ctx.plan = parsed.get("plan", [])
             ctx.needs_browser = parsed.get("needs_browser", False)
             ctx.facts.extend(parsed.get("plan", [])[:5])
         else:
-            logger.warning(f"Planner agent failed: {plan_output.error}")
+            logger.warning(f"Planner agent failed: {plan_result.error}")
 
-        researcher_output = await self._run_agent(AgentRole.RESEARCHER, ctx)
-        ctx.agent_outputs["researcher"] = researcher_output
-        if researcher_output.success:
-            parsed = researcher_output.parsed
+        ctx.agent_outputs["researcher"] = researcher_result
+        if researcher_result.success:
+            parsed = researcher_result.parsed
             ctx.evidence.extend(parsed.get("evidence", [])[:settings.max_evidence_items])
             ctx.facts.extend(parsed.get("findings", [])[:5])
         else:
-            logger.warning(f"Researcher agent failed: {researcher_output.error}")
+            logger.warning(f"Researcher agent failed: {researcher_result.error}")
 
         solver_output = await self._run_agent(AgentRole.SOLVER, ctx)
         ctx.agent_outputs["solver"] = solver_output

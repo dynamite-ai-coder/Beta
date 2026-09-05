@@ -76,6 +76,8 @@ services:
         generateValue: true
       - key: DEBUG
         value: "false"
+      - key: LANGUAGE
+        value: "pl"
       - key: BACKEND_URL
         value: "http://localhost:8000"
       - key: LOCAL_UI_HOST

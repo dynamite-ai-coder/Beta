@@ -454,6 +454,39 @@ async def list_models():
     }
 
 
+SUPPORTED_LANGUAGES = {
+    "pl": "Polski", "en": "English", "de": "Deutsch", "fr": "Français",
+    "es": "Español", "it": "Italiano", "pt": "Português", "nl": "Nederlands",
+    "cs": "Čeština", "sk": "Slovenčina", "hu": "Magyar", "ro": "Română",
+    "bg": "Български", "hr": "Hrvatski", "sl": "Slovenščina", "lt": "Lietuvių",
+    "lv": "Latviešu", "et": "Eesti", "fi": "Suomi", "sv": "Svenska",
+    "da": "Dansk", "no": "Norsk", "el": "Ελληνικά", "tr": "Türkçe",
+    "uk": "Українська",
+}
+
+
+@ai_router.get("/language")
+async def get_language():
+    return {"language": settings.language, "supported": SUPPORTED_LANGUAGES}
+
+
+@ai_router.post("/language")
+async def set_language(request: Request):
+    body = await request.json()
+    lang = body.get("language", "").lower().strip()
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported language. Supported: {', '.join(SUPPORTED_LANGUAGES.keys())}",
+        )
+    settings.language = lang
+    from backend.ai.agent_roles import get_agent_prompt
+    from backend.ai.orchestrator import orchestrator
+    for role, agent in orchestrator.agents.items():
+        agent.system_prompt = get_agent_prompt(role)
+    return {"language": lang, "name": SUPPORTED_LANGUAGES[lang]}
+
+
 @ai_router.get("/browser/screenshot/{task_id}")
 async def get_browser_screenshot(
     request: Request, task_id: str

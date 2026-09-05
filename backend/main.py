@@ -47,9 +47,11 @@ STATUS_CACHE_TTL = 5.0
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global proxy_client
+    from backend.ai.llm_provider import key_pool
     logger.info("Starting Browser Automation API")
     os.makedirs(settings.img_dir, exist_ok=True)
     await init_db()
+    key_pool.load()
     proxy_client = httpx.AsyncClient(
         timeout=httpx.Timeout(30.0),
         limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),

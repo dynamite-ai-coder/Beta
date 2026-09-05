@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from backend.ai.agent_roles import AgentRole, AGENT_SYSTEM_PROMPTS
+from backend.ai.agent_roles import AgentRole, get_agent_prompt
 from backend.ai.models import AgentOutput
 from backend.config import settings
 
@@ -77,7 +77,7 @@ class GroqAgentProvider:
         self._fallback_key = cfg["api_key"]
         self.model = cfg["model"]
         self.base_url = cfg["base_url"].rstrip("/")
-        self.system_prompt = AGENT_SYSTEM_PROMPTS.get(agent_role, "")
+        self.system_prompt = get_agent_prompt(agent_role)
 
     async def chat(self, user_message: str, context_summary: str = "") -> AgentOutput:
         start = time.monotonic()

@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     preview_enabled: bool = True
     preview_token_secret: str = "change-me-in-production"
 
+    # Language
+    language: str = "pl"
+
     # App
     debug: bool = False
     img_dir: str = "img"
