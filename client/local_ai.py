@@ -295,7 +295,7 @@ async def _cloud_preprocess(message: str, file_context: str = "") -> str:
     try:
         import httpx as _httpx
         base_url = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1")
-        model = os.environ.get("AI_MODEL", "llama-3.1-8b-instant")
+        model = os.environ.get("AI_MODEL", "openai/gpt-oss-120b")
 
         system = (
             "You are a prompt preprocessor. Improve this user prompt for an AI assistant.\n"

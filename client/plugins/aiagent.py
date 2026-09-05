@@ -118,16 +118,16 @@ class Plugin(PluginBase):
             except Exception:
                 ram_mb = 8192
 
-        recommended_model = "llama-3.1-8b-instant"
+        recommended_model = "openai/gpt-oss-120b"
         recommended_provider = "groq"
         if is_termux or (is_android and ram_mb < 6000):
-            recommended_model = "tinyllama"
-            recommended_provider = "ollama"
+            recommended_model = "allam-2-7b"
+            recommended_provider = "groq"
         elif ram_mb < 4000:
-            recommended_model = "tinyllama"
-            recommended_provider = "ollama"
+            recommended_model = "allam-2-7b"
+            recommended_provider = "groq"
         elif ram_mb < 8000:
-            recommended_model = "llama-3.1-8b-instant"
+            recommended_model = "qwen/qwen3.6-27b"
             recommended_provider = "groq"
 
         return {
@@ -251,26 +251,26 @@ class Plugin(PluginBase):
         if env["is_termux"] or env["ram_mb"] < 4000:
             rec["recommendation"] = {
                 "provider": "groq",
-                "model": "llama-3.1-8b-instant",
+                "model": "allam-2-7b",
                 "reason": f"Termux/Android with {env['ram_mb']}MB RAM.",
                 "alt_provider": "groq",
-                "alt_model": "llama-3.3-70b-versatile",
+                "alt_model": "qwen/qwen3.6-27b",
             }
         elif env["ram_mb"] < 8000:
             rec["recommendation"] = {
                 "provider": "groq",
-                "model": "llama-3.1-8b-instant",
+                "model": "qwen/qwen3.6-27b",
                 "reason": f"{env['ram_mb']}MB RAM. Free Groq API for fast inference.",
                 "alt_provider": "groq",
-                "alt_model": "llama-3.3-70b-versatile",
+                "alt_model": "allam-2-7b",
             }
         else:
             rec["recommendation"] = {
                 "provider": "groq",
-                "model": "llama-3.3-70b-versatile",
-                "reason": f"{env['ram_mb']}MB RAM. Groq 70B for best quality.",
+                "model": "openai/gpt-oss-120b",
+                "reason": f"{env['ram_mb']}MB RAM. Groq GPT-OSS-120B for best quality.",
                 "alt_provider": "groq",
-                "alt_model": "llama-3.1-8b-instant",
+                "alt_model": "qwen/qwen3.6-27b",
             }
 
         return rec

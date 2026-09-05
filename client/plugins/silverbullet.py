@@ -329,7 +329,7 @@ class Plugin(PluginBase):
             async with httpx.AsyncClient(timeout=30.0) as client:
                 api_key = os.environ.get("AI_API_KEY", "")
                 base_url = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1")
-                model = os.environ.get("AI_MODEL", "llama-3.1-8b-instant")
+                model = os.environ.get("AI_MODEL", "openai/gpt-oss-120b")
                 r = await client.post(
                     f"{base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},

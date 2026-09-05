@@ -59,6 +59,9 @@
         .topbar-btn.live{border-color:var(--green);color:var(--green)}
         .topbar-btn.live:hover{background:rgba(52,211,153,.1)}
         .topbar-btn.live .live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite}
+        .topbar-btn.tor{position:relative}
+        .topbar-btn.tor.active{border-color:var(--yellow);color:var(--yellow)}
+        .topbar-btn.tor.active:hover{background:rgba(251,191,36,.1)}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
         /* Chat */
@@ -208,6 +211,10 @@
                 </div>
             </div>
             <div class="topbar-right">
+                <button class="topbar-btn tor" id="tor-btn" onclick="toggleTor()" title="Enable Tor anonymity (optional)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+                    Tor
+                </button>
                 <button class="topbar-btn live" id="preview-btn" onclick="openPreview()" title="Live Chromium browser preview">
                     <span class="live-dot"></span>
                     Live Preview
@@ -483,6 +490,18 @@ async function loadPlugins(){
 }
 
 loadPlugins();checkStatus();setInterval(checkStatus,30000);
+
+/* Tor toggle */
+let torEnabled=false;
+async function toggleTor(){
+    torEnabled=!torEnabled;
+    const btn=document.getElementById('tor-btn');
+    btn.className=torEnabled?'topbar-btn tor active':'topbar-btn tor';
+    try{
+        await fetch('/api/tor/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:torEnabled})});
+        addMessage(torEnabled?'Tor enabled — browsing anonymously':'Tor disabled — direct connection','assistant');
+    }catch(e){addMessage('Tor toggle failed','assistant')}
+}
 </script>
 </body>
 </html>

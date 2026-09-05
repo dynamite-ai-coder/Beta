@@ -105,6 +105,25 @@ class LocalUI:
             self._chat.clear_history()
             return {"status": "cleared"}
 
+        @app.post("/api/tor/toggle")
+        async def tor_toggle(body: dict = {}):
+            enabled = body.get("enabled", False)
+            try:
+                import httpx
+                backend_url = os.environ.get("BACKEND_URL", "https://beta-fmp9.onrender.com")
+                token = os.environ.get("API_AUTH_TOKEN", "")
+                async with httpx.AsyncClient(timeout=10) as client:
+                    r = await client.post(
+                        f"{backend_url}/api/tor/toggle",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={"enabled": enabled},
+                    )
+                    if r.status_code == 200:
+                        return {"status": "ok", "tor_enabled": enabled}
+            except Exception:
+                pass
+            return {"status": "ok", "tor_enabled": enabled, "note": "local only"}
+
         @app.post("/api/upload")
         async def upload_file(file: UploadFile = File(...)):
             content = await file.read()

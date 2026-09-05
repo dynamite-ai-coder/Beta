@@ -24,7 +24,7 @@ class Plugin(PluginBase):
         super().__init__(config)
         self._api_key = os.environ.get("AI_API_KEY", "")
         self._base_url = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1")
-        self._model = os.environ.get("AI_MODEL", "llama-3.3-70b-versatile")
+        self._model = os.environ.get("AI_MODEL", "openai/gpt-oss-120b")
 
     async def execute(self, action: str = "think", **kw: Any) -> dict[str, Any]:
         actions = {
