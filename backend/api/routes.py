@@ -795,6 +795,7 @@ async def ai_stats() -> dict:
     from backend.ai.cache import response_cache
     from backend.monitoring.rate_monitor import rate_monitor
     from backend.monitoring.agent_logger import agent_logger
+    from backend.monitoring.health_monitor import health_monitor
     return {
         "orchestrator": orchestrator.stats,
         "keys_loaded": key_pool.count,
@@ -803,6 +804,7 @@ async def ai_stats() -> dict:
         "rate_limit": rate_monitor.get_stats(),
         "agents": agent_logger.get_agent_stats(),
         "summary": agent_logger.get_summary(),
+        "health": health_monitor.get_stats(),
     }
 
 

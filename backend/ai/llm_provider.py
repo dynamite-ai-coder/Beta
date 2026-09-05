@@ -14,6 +14,7 @@ from backend.ai.models import AgentOutput
 from backend.config import settings
 from backend.monitoring.rate_monitor import rate_monitor
 from backend.monitoring.agent_logger import agent_logger
+from backend.monitoring.health_monitor import health_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +87,22 @@ class GroqAgentProvider:
         start = time.monotonic()
         messages = self._build_messages(user_message, context_summary)
 
+        if not health_monitor.can_execute(self.role.value):
+            agent_logger.log(
+                agent=self.role.value, task_id="health_check",
+                duration_ms=0, success=False,
+                error="Agent unhealthy (cooldown)",
+                input_preview=user_message[:100],
+            )
+            return AgentOutput(
+                agent=self.role, success=False,
+                error="Agent unhealthy (cooldown)",
+            )
+
         cached = response_cache.get(self.role.value, messages, self.model)
         if cached:
             duration_ms = (time.monotonic() - start) * 1000
+            health_monitor.record_success(self.role.value)
             agent_logger.log(
                 agent=self.role.value, task_id="cache",
                 duration_ms=duration_ms, success=True,
@@ -117,6 +131,7 @@ class GroqAgentProvider:
 
                 if result.success:
                     rate_monitor.record_call(key, result.duration_ms, result.tokens_used)
+                    health_monitor.record_success(self.role.value)
                     response_cache.set(self.role.value, messages, {
                         "raw": result.raw_response,
                         "parsed": result.parsed,
@@ -136,6 +151,7 @@ class GroqAgentProvider:
                 last_error = result.error
                 if result.error and "Rate limited" in result.error:
                     rate_monitor.record_error(key, is_rate_limit=True)
+                    health_monitor.record_failure(self.role.value)
                     logger.warning(
                         f"Agent {self.role.value} rate limited on key...{key[-6:]}, "
                         f"retry {attempt + 1}/{MAX_RETRIES} in {delay:.1f}s"
@@ -144,6 +160,7 @@ class GroqAgentProvider:
                     continue
 
                 rate_monitor.record_error(key)
+                health_monitor.record_failure(self.role.value)
                 result.duration_ms = (time.monotonic() - start) * 1000
                 agent_logger.log(
                     agent=self.role.value, task_id="workflow",
