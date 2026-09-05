@@ -119,7 +119,7 @@ def create_browser(proxy_url: str | None = None) -> Any:
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1024,768")
+    options.add_argument("--window-size=1280,720")
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-infobars")
     options.add_argument("--disable-browser-side-navigation")
@@ -139,6 +139,8 @@ def create_browser(proxy_url: str | None = None) -> Any:
     options.add_argument("--disable-gpu-compositing")
     options.add_argument("--disable-software-rasterizer")
     options.add_argument("--lang=en-US,en")
+    options.add_argument("--force-device-scale-factor=1")
+    options.add_argument("--disable-features=IsolateOrigins,site-per-process")
 
     options.add_argument(
         "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
