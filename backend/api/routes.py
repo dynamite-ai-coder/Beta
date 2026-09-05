@@ -815,3 +815,47 @@ async def ai_stats() -> dict:
 async def ai_logs(count: int = 50, agent: str = None) -> dict:
     from backend.monitoring.agent_logger import agent_logger
     return {"logs": agent_logger.get_recent(count, agent)}
+
+
+@router.post(
+    "/batch/submit",
+    dependencies=[Depends(verify_api_key)],
+)
+async def batch_submit(request: Request) -> dict:
+    from backend.tasks.batch import batch_queue
+    body = await request.json()
+    payload = body.get("payload", {})
+    priority = body.get("priority", 0)
+    task_id = await batch_queue.add(payload, priority)
+    return {"task_id": task_id, "status": "queued"}
+
+
+@router.get(
+    "/batch/status/{task_id}",
+    dependencies=[Depends(verify_api_key)],
+)
+async def batch_status(task_id: str) -> dict:
+    from backend.tasks.batch import batch_queue
+    status = batch_queue.get_status(task_id)
+    if not status:
+        return {"error": "Task not found"}
+    return status
+
+
+@router.post(
+    "/batch/cancel/{task_id}",
+    dependencies=[Depends(verify_api_key)],
+)
+async def batch_cancel(task_id: str) -> dict:
+    from backend.tasks.batch import batch_queue
+    ok = await batch_queue.cancel(task_id)
+    return {"cancelled": ok}
+
+
+@router.get(
+    "/batch/stats",
+    dependencies=[Depends(verify_api_key)],
+)
+async def batch_stats() -> dict:
+    from backend.tasks.batch import batch_queue
+    return batch_queue.stats
