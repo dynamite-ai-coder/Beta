@@ -94,6 +94,16 @@ class BrowserWorker:
                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
             )
 
+            try:
+                from backend.browser.proxy_manager import proxy_manager
+                if proxy_manager.enabled:
+                    entry = proxy_manager.get_next()
+                    if entry:
+                        options.add_argument(f"--proxy-server={entry.url}")
+                        logger.info(f"Client browser proxy: {entry.ip}")
+            except Exception:
+                pass
+
             self._driver = webdriver.Chrome(options=options)
             self._driver.set_page_load_timeout(30)
             self._driver.implicitly_wait(5)

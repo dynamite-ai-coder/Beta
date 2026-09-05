@@ -5,6 +5,7 @@ import os
 from typing import Any
 
 from backend.config import settings
+from backend.browser.proxy_manager import proxy_manager
 
 logger = logging.getLogger(__name__)
 
@@ -162,8 +163,14 @@ def create_browser(proxy_url: str | None = None) -> Any:
         logger.warning("Browser not found: %s", e)
 
     effective_proxy = proxy_url
-    if not effective_proxy and settings.proxy_enabled and settings.proxy_url:
-        effective_proxy = settings.proxy_url
+    if not effective_proxy:
+        if settings.proxy_enabled and settings.proxy_url:
+            effective_proxy = settings.proxy_url
+        elif proxy_manager.enabled:
+            entry = proxy_manager.get_next()
+            if entry:
+                effective_proxy = entry.url
+                logger.info("Using rotating proxy: %s", entry.ip)
     if effective_proxy:
         options.add_argument(f"--proxy-server={effective_proxy}")
         logger.info("Proxy enabled: %s", effective_proxy.split("@")[-1] if "@" in effective_proxy else effective_proxy)

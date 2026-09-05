@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import os
 from urllib.parse import urlparse
 
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -120,6 +123,19 @@ class Settings(BaseSettings):
                 f"@proxy-us.proxy-cheap.com:5959"
             )
 
+        # Auto-enable proxy if proxy.txt exists
+        if not self.proxy_enabled:
+            proxy_file = os.environ.get("PROXY_FILE", "proxy.txt")
+            if os.path.exists(proxy_file):
+                try:
+                    with open(proxy_file) as _pf:
+                        _first_line = _pf.readline().strip()
+                    if _first_line and ":" in _first_line:
+                        self.proxy_enabled = True
+                        logger.info("Auto-enabled proxy from proxy.txt")
+                except Exception:
+                    pass
+
         if not self.ai_api_key:
             self.ai_api_key = os.environ.get("GROQ_API_KEY", os.environ.get("groq_apikey", ""))
         if not self.beta_api_key:
@@ -189,8 +205,6 @@ BLOCKED_HOSTS = {
 }
 
 settings = Settings()
-
-logger = logging.getLogger(__name__)
 
 
 def is_url_allowed(url: str) -> bool:

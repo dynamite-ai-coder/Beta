@@ -66,6 +66,10 @@ services:
         value: 300
       - key: RATE_LIMIT_PER_MINUTE
         value: "30"
+      - key: PROXY_ENABLED
+        value: "true"
+      - key: PROXY_FILE
+        value: "proxy.txt"
       - key: PREVIEW_ENABLED
         value: "true"
       - key: PREVIEW_TOKEN_SECRET

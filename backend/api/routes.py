@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import uuid
 
 from fastapi import (
@@ -684,3 +685,43 @@ async def websocket_agent(websocket: WebSocket):
     finally:
         if client_id:
             await client_manager.unregister_client(client_id)
+
+
+# ============================================================
+# PROXY MANAGEMENT
+# ============================================================
+
+
+@router.get(
+    "/proxy/list",
+    dependencies=[Depends(verify_api_key)],
+)
+async def list_proxies() -> dict:
+    from backend.browser.proxy_manager import proxy_manager
+    return {
+        "count": proxy_manager.count,
+        "enabled": proxy_manager.enabled,
+        "proxies": proxy_manager.get_all(),
+    }
+
+
+@router.post(
+    "/proxy/reload",
+    dependencies=[Depends(verify_api_key)],
+)
+async def reload_proxies() -> dict:
+    from backend.browser.proxy_manager import proxy_manager
+    count = proxy_manager.reload()
+    return {"status": "reloaded", "count": count}
+
+
+@router.get(
+    "/proxy/next",
+    dependencies=[Depends(verify_api_key)],
+)
+async def get_next_proxy() -> dict:
+    from backend.browser.proxy_manager import proxy_manager
+    entry = proxy_manager.get_next()
+    if entry:
+        return {"ip": entry.ip, "port": entry.port, "protocol": entry.protocol}
+    return {"error": "No proxies available"}
