@@ -5,7 +5,7 @@ services:
     plan: free
     envVars:
       - key: RENDER_API_KEY
-        value: rnd_HzODDgruSZ1SPdWpJHwLsJgLiqjB
+        value: rnd_nglusem4WZofG64JH9imWTGiJEjL
       - key: AI_API_KEY
         sync: false
       - key: AI_MODEL
