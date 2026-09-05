@@ -32,7 +32,7 @@ class ClientConfig:
     browser_preview_enabled: bool = True
     browser_preview_fps: int = 2
     browser_preview_quality: int = 70
-    browser_preview_max_width: int = 1280
+    browser_preview_max_width: int = 1024
 
     # File uploads
     max_upload_size: int = 10_485_760  # 10MB

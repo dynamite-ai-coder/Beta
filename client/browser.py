@@ -84,7 +84,7 @@ class BrowserWorker:
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-gpu")
-            options.add_argument("--window-size=1280,720")
+            options.add_argument("--window-size=1024,768")
             options.add_argument("--disable-extensions")
             options.add_argument("--disable-blink-features=AutomationControlled")
             options.add_experimental_option("excludeSwitches", ["enable-automation"])
