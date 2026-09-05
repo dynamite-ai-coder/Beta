@@ -1,0 +1,42 @@
+  ┃  2026-09-05 17:06:39,733 INFO backend.main:         
+  ┃  Starting Browser Automation API                    
+  ┃  2026-09-05 17:06:39,734 INFO backend.database:     
+  ┃  Initializing SQLite database                       
+  ┃  2026-09-05 17:06:39,754 INFO backend.tasks.        
+  ┃  scheduler: Task scheduler started                  
+  ┃  INFO:     Application startup complete.            
+  ┃  INFO:     Uvicorn running on http://0.0.0.0:8000   
+  ┃  (Press CTRL+C to quit)                             
+  ┃  ===                                                
+  ┃                                                     
+                                                        
+     ▣  Build · MiMo V2.5 Free                          
+                                                        
+  ┃                                                     
+  ┃                                                     
+  ┃                                                     
+  ┃  Build · MiMo V2.5 Free OpenCode Zen                
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀  
+   ⬝⬝⬝⬝⬝⬝■■  esc interrupt62.4K (31%)  ctrl+p commands  
+                                                        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
