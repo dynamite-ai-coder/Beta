@@ -121,7 +121,7 @@ class Settings(BaseSettings):
             )
 
         if not self.ai_api_key:
-            self.ai_api_key = os.environ.get("GROQ_API_KEY", "")
+            self.ai_api_key = os.environ.get("GROQ_API_KEY", os.environ.get("groq_apikey", ""))
         if not self.beta_api_key:
             self.beta_api_key = os.environ.get("BETA_API_KEY", self.api_auth_token)
 
