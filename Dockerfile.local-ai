@@ -31,6 +31,7 @@ if not os.path.exists(target):
 "
 
 COPY local_ai_server.py .
+COPY shared_protocol.py .
 
 EXPOSE 8100
 

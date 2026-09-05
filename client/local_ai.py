@@ -288,25 +288,68 @@ async def _load_model() -> bool:
 
 
 async def _remote_local_ai_preprocess(message: str, file_context: str = "") -> str:
-    """Call the remote Beta-LocalAI service (Gemma 2B on Render)."""
+    """Call the remote Beta-LocalAI service (Phi-3-mini on Render) using compact protocol."""
     local_ai_url = os.environ.get("LOCAL_AI_URL", "")
     if not local_ai_url:
         return ""
 
     try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from shared_protocol import pack_preprocess, unpack_preprocess_reply
+
         import httpx as _httpx
         async with _httpx.AsyncClient(timeout=30.0) as client:
             r = await client.post(
-                f"{local_ai_url}/v1/preprocess",
-                json={"message": message, "file_context": file_context},
+                f"{local_ai_url}/v1/protocol",
+                json={"message": pack_preprocess(message, file_context)},
             )
             r.raise_for_status()
             data = r.json()
-            if data.get("used_local_ai") and data.get("processed"):
-                return data["processed"]
+            reply_raw = data.get("reply", "")
+            if reply_raw:
+                reply = unpack_preprocess_reply(reply_raw)
+                if reply["success"] and reply["processed"]:
+                    logger.debug("LocalAI protocol: %dms", reply["latency_ms"])
+                    return reply["processed"]
     except Exception as e:
         logger.debug("Remote local AI failed: %s", e)
     return ""
+
+
+async def classify_request(message: str) -> dict:
+    """Classify request complexity using LocalAI compact protocol."""
+    local_ai_url = os.environ.get("LOCAL_AI_URL", "")
+    if not local_ai_url:
+        return {"complexity": "medium", "agents": [], "skip": [], "confidence": 0.7}
+
+    try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from shared_protocol import pack_classify, decode_any, MsgType
+
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(
+                f"{local_ai_url}/v1/protocol",
+                json={"message": pack_classify(message)},
+            )
+            r.raise_for_status()
+            data = r.json()
+            reply_raw = data.get("reply", "")
+            if reply_raw:
+                msg = decode_any(reply_raw)
+                if msg.type == MsgType.CLASSIFY_REPLY:
+                    p = msg.payload
+                    return {
+                        "complexity": p.get("cx", "medium"),
+                        "agents": p.get("ag", []),
+                        "skip": p.get("sk", []),
+                        "confidence": p.get("c", 0.7),
+                    }
+    except Exception as e:
+        logger.debug("Classify failed: %s", e)
+    return {"complexity": "medium", "agents": [], "skip": [], "confidence": 0.7}
 
 
 async def _cloud_preprocess(message: str, file_context: str = "") -> str:
