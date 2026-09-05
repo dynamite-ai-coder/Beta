@@ -783,3 +783,17 @@ async def get_next_proxy() -> dict:
     if entry:
         return {"ip": entry.ip, "port": entry.port, "protocol": entry.protocol}
     return {"error": "No proxies available"}
+
+
+@router.get(
+    "/ai/stats",
+    dependencies=[Depends(verify_api_key)],
+)
+async def ai_stats() -> dict:
+    from backend.ai.orchestrator import orchestrator
+    from backend.ai.llm_provider import key_pool
+    return {
+        "orchestrator": orchestrator.stats,
+        "keys_loaded": key_pool.count,
+        "active_workflows": orchestrator._active_workflows,
+    }
