@@ -6,8 +6,6 @@ import signal
 import sys
 import threading
 
-import uvicorn
-
 from client.config import ClientConfig
 from client.ui import print_header, print_status
 from client.chat import ChatClient
@@ -26,15 +24,10 @@ def _start_local_ui(
     host: str,
     port: int,
 ) -> None:
-    config = uvicorn.Config(
-        ui.app,
-        host=host,
-        port=port,
-        log_level="warning",
-        access_log=False,
+    thread = threading.Thread(
+        target=lambda: ui.app.run(host=host, port=port, debug=False, use_reloader=False),
+        daemon=True,
     )
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     logger.info(f"Local Web UI: http://{host}:{port}")
 
