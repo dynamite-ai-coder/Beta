@@ -66,7 +66,7 @@ class Plugin(PluginBase):
         if not url:
             return {"error": "url required"}
 
-        api_url = f"{THUM_IO_API}{width}/crop/{height}/{url}"
+        api_url = f"https://image.thum.io/get/width/{width}/crop/{height}/{url}"
         try:
             async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 resp = await client.get(api_url)

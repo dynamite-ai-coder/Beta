@@ -258,11 +258,7 @@ class LocalUI:
 
             async def mjpeg_generator():
                 from client.plugins.manager import plugin_manager
-                screenshot_plugin = None
-                for p in plugin_manager.plugins:
-                    if p.name == "screenshot":
-                        screenshot_plugin = p
-                        break
+                screenshot_plugin = plugin_manager.get("screenshot")
 
                 while True:
                     try:
