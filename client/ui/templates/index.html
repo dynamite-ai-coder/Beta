@@ -60,6 +60,9 @@
         .welcome-logo{width:48px;height:48px;border-radius:12px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff}
         .welcome-title{font-size:22px;font-weight:600;color:var(--text)}
         .welcome-sub{font-size:14px;color:var(--text3);text-align:center;max-width:500px;line-height:1.5}
+        .quick-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:12px}
+        .quick-btn{padding:8px 14px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:13px;transition:all .15s;font-family:inherit}
+        .quick-btn:hover{background:var(--surface2);border-color:var(--accent);color:var(--accent)}
 
         /* Messages */
         .message{display:flex;gap:12px;padding:16px 0;animation:fadeIn .2s ease}
@@ -101,6 +104,7 @@
         .send-btn.active{background:var(--accent)}
         .send-btn:hover.active{opacity:.85}
         .send-btn:disabled{cursor:not-allowed}
+        .send-btn.loading{background:var(--accent);opacity:.6;pointer-events:none}
         .send-btn svg{width:16px;height:16px}
         .input-footer{display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:0 4px}
         .input-tools{display:flex;gap:4px}
@@ -190,6 +194,9 @@
             <span class="topbar-title">Beta AI</span>
         </div>
         <div class="topbar-right">
+            <button class="btn btn-sm" onclick="openSettings()" title="Settings">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            </button>
             <button class="btn btn-sm btn-view" id="view-btn" onclick="openPreview()" title="View Selenium Browser">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 View
@@ -218,6 +225,13 @@
                     <div class="welcome-logo">B</div>
                     <div class="welcome-title">How can I help you today?</div>
                     <div class="welcome-sub">I can browse the web, search, analyze content, and write code. Pick a plugin or just start chatting.</div>
+                    <div class="quick-actions">
+                        <button class="quick-btn" onclick="quickSend('Explain QuickSort algorithm')">Sort Algorithm</button>
+                        <button class="quick-btn" onclick="quickSend('Search for Python tutorials')">Web Search</button>
+                        <button class="quick-btn" onclick="quickSend('Write a hello world in Python')">Write Code</button>
+                        <button class="quick-btn" onclick="quickSend('What is machine learning?')">ML Explained</button>
+                        <button class="quick-btn" onclick="quickSend('Help me debug this code')">Debug Code</button>
+                    </div>
                 </div>
                 <div id="messages"></div>
                 <div class="typing" id="typing">
@@ -243,8 +257,15 @@
                         </button>
                         <input type="file" id="file-input" accept=".txt,.pdf,.docx,.csv,.json,.png,.jpg,.jpeg" onchange="handleFile(this)" style="display:none">
                         <span id="upload-status" style="font-size:11px;color:var(--accent);display:none"></span>
+                        <button class="tool-btn" onclick="clearChat()" title="Clear chat">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                            Clear
+                        </button>
                     </div>
-                    <div class="char-count" id="char-count">0</div>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <span style="font-size:10px;color:var(--text3)">Enter to send, Shift+Enter for newline</span>
+                        <div class="char-count" id="char-count">0</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -265,6 +286,46 @@
         <div class="sidebar-status">
             <span class="status-dot" id="sidebar-status-dot"></span>
             <span id="sidebar-status-text">Checking...</span>
+        </div>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="preview-overlay" id="settings-overlay" onclick="if(event.target===this)closeSettings()">
+    <div class="preview-modal" style="max-width:600px;height:auto;max-height:80vh">
+        <div class="preview-header">
+            <div class="preview-title">Settings</div>
+            <button class="preview-close" onclick="closeSettings()">×</button>
+        </div>
+        <div style="padding:20px;overflow-y:auto">
+            <div style="margin-bottom:16px">
+                <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:6px">Backend URL</label>
+                <input type="text" id="settings-backend" style="width:100%;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px" value="http://localhost:8000">
+            </div>
+            <div style="margin-bottom:16px">
+                <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:6px">Default Language</label>
+                <select id="settings-lang" style="width:100%;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
+                    <option value="pl" selected>Polski</option>
+                    <option value="en">English</option>
+                    <option value="de">Deutsch</option>
+                    <option value="fr">Français</option>
+                    <option value="es">Español</option>
+                    <option value="it">Italiano</option>
+                </select>
+            </div>
+            <div style="margin-bottom:16px">
+                <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:6px">Preview FPS</label>
+                <select id="settings-fps" style="width:100%;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
+                    <option value="5">5 FPS (Low bandwidth)</option>
+                    <option value="10">10 FPS</option>
+                    <option value="15" selected>15 FPS (Default)</option>
+                    <option value="20">20 FPS (High quality)</option>
+                </select>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+                <button class="btn" onclick="closeSettings()">Cancel</button>
+                <button class="btn btn-accent" onclick="saveSettings()">Save</button>
+            </div>
         </div>
     </div>
 </div>
@@ -315,11 +376,13 @@ input.addEventListener('input',function(){
 });
 
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!sendBtn.disabled)sendChat()}}
+function quickSend(text){input.value=text;input.dispatchEvent(new Event('input'));sendChat()}
 
 async function sendChat(){
     const msg=input.value.trim();
     if(!msg||isSending)return;
     isSending=true;input.value='';input.style.height='auto';sendBtn.disabled=true;sendBtn.classList.remove('active');
+    sendBtn.classList.add('loading');
     document.getElementById('char-count').textContent='0';
     welcomeEl.style.display='none';
     addMessage(msg,'user');typingEl.classList.add('active');scrollToBottom();
@@ -329,8 +392,8 @@ async function sendChat(){
         typingEl.classList.remove('active');
         if(r.ok&&d.response){addMessage(d.response,'assistant');fileContext=''}
         else addMessage('Something went wrong. Try again.','assistant');
-    }catch(e){typingEl.classList.remove('active');addMessage('Connection error.','assistant')}
-    isSending=false;sendBtn.disabled=true;sendBtn.classList.remove('active');
+    }catch(e){typingEl.classList.remove('active');addMessage('Connection error. Check if server is running.','assistant')}
+    isSending=false;sendBtn.disabled=true;sendBtn.classList.remove('active','loading');
 }
 
 function addMessage(text,type){
@@ -339,7 +402,7 @@ function addMessage(text,type){
     const av=type==='user'?'Y':'B';
     const nm=type==='user'?'You':'Beta AI';
     const tm=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-    div.innerHTML=`<div class="msg-avatar">${av}</div><div class="msg-content"><div class="msg-name">${nm}</div><div class="msg-text">${fmt(text)}</div><div class="msg-actions"><button class="msg-action-btn" onclick="copyMsg(this)">Copy</button></div></div>`;
+    div.innerHTML=`<div class="msg-avatar">${av}</div><div class="msg-content"><div class="msg-name">${nm} <span style="font-weight:400;color:var(--text3);font-size:11px">${tm}</span></div><div class="msg-text">${fmt(text)}</div><div class="msg-actions"><button class="msg-action-btn" onclick="copyMsg(this)">Copy</button><button class="msg-action-btn" onclick="regenerateMsg(this)">Regenerate</button></div></div>`;
     messagesEl.appendChild(div);scrollToBottom();
 }
 
@@ -348,13 +411,19 @@ function fmt(t){
         .replace(/```(\w*)\n([\s\S]*?)```/g,'<pre><code>$2</code></pre>')
         .replace(/`([^`]+)`/g,'<code>$1</code>')
         .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g,'<em>$1</em>')
         .replace(/\n/g,'<br>');
 }
 
 function copyMsg(b){const t=b.closest('.msg-content').querySelector('.msg-text').textContent;navigator.clipboard.writeText(t);b.textContent='Copied!';setTimeout(()=>b.textContent='Copy',1500)}
+function regenerateMsg(b){
+    const msgs=document.querySelectorAll('.message.user');
+    if(msgs.length>0){const lastMsg=msgs[msgs.length-1].querySelector('.msg-text').textContent;input.value=lastMsg;input.dispatchEvent(new Event('input'));sendChat()}
+}
 function scrollToBottom(){document.getElementById('chat-area').scrollTop=document.getElementById('chat-area').scrollHeight}
 
 function newChat(){messagesEl.innerHTML='';welcomeEl.style.display='flex';typingEl.classList.remove('active');isSending=false}
+function clearChat(){newChat();fetch('/api/chat/clear',{method:'POST'}).catch(()=>{})}
 
 /* Plugin menu */
 function togglePluginMenu(){
@@ -419,7 +488,11 @@ async function checkStatus(){
         const r=await fetch('/api/localai/status');const d=await r.json();
         const dot=document.getElementById('status-dot');const txt=document.getElementById('status-text');
         const sdot=document.getElementById('sidebar-status-dot');const stxt=document.getElementById('sidebar-status-text');
-        if(d.groq_configured){dot.className='status-dot online';txt.textContent='AI Ready';sdot.className='status-dot online';stxt.textContent='AI Connected'}
+        if(d.groq_configured){
+            dot.className='status-dot online';txt.textContent='AI Ready';
+            sdot.className='status-dot online';stxt.textContent='AI Connected';
+            if(d.local_ai_available){txt.textContent='AI + Local';stxt.textContent='AI + Local AI'}
+        }
         else{dot.className='status-dot warning';txt.textContent='No AI Key';sdot.className='status-dot warning';stxt.textContent='No Key'}
     }catch(e){
         document.getElementById('status-dot').className='status-dot offline';
@@ -454,10 +527,24 @@ async function loadPlugins(){
             si.className='sidebar-plugin';
             si.dataset.name=p.name;
             si.onclick=()=>selectPlugin(p.name);
-            si.innerHTML=`<div class="sidebar-plugin-icon">${getPluginIcon(p.name)}</div><div class="sidebar-plugin-info"><div class="sidebar-plugin-name">${p.name}</div><div class="sidebar-plugin-desc">${p.actions?.length||0} actions</div></div>`;
+            si.innerHTML=`<div class="sidebar-plugin-icon">${getPluginIcon(p.name)}</div><div class="sidebar-plugin-info"><div class="sidebar-plugin-name">${p.name}</div><div class="sidebar-plugin-desc">${p.description||''}</div></div>`;
             sideList.appendChild(si);
         });
     }catch(e){}
+}
+
+async function executePlugin(name, action, params){
+    addMessage(`Executing plugin: ${name}...`, 'assistant');
+    try{
+        const r=await fetch('/api/plugins/execute',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({name, action, params})
+        });
+        const d=await r.json();
+        if(r.ok){addMessage(`Plugin result:\n${JSON.stringify(d,null,2)}`, 'assistant')}
+        else{addMessage(`Plugin error: ${d.error||'Unknown error'}`, 'assistant')}
+    }catch(e){addMessage('Plugin execution failed', 'assistant')}
 }
 
 function handleFile(el){
@@ -470,12 +557,32 @@ function handleFile(el){
     }).catch(()=>{st.textContent='Error';setTimeout(()=>st.style.display='none',2000)});
 }
 
+/* Settings */
+function openSettings(){document.getElementById('settings-overlay').classList.add('active')}
+function closeSettings(){document.getElementById('settings-overlay').classList.remove('active')}
+function saveSettings(){
+    localStorage.setItem('beta_settings',JSON.stringify({
+        backend:document.getElementById('settings-backend').value,
+        lang:document.getElementById('settings-lang').value,
+        fps:document.getElementById('settings-fps').value
+    }));
+    closeSettings();
+}
+function loadSettings(){
+    try{
+        const s=JSON.parse(localStorage.getItem('beta_settings')||'{}');
+        if(s.backend)document.getElementById('settings-backend').value=s.backend;
+        if(s.lang)document.getElementById('settings-lang').value=s.lang;
+        if(s.fps){document.getElementById('settings-fps').value=s.fps;previewFps=parseInt(s.fps)}
+    }catch(e){}
+}
+
 /* Close menus on outside click */
 document.addEventListener('click',e=>{
     if(!e.target.closest('.plugin-dropdown'))closePluginMenu();
 });
 
-loadPlugins();checkStatus();setInterval(checkStatus,30000);
+loadPlugins();checkStatus();loadSettings();setInterval(checkStatus,30000);
 </script>
 </body>
 </html>
