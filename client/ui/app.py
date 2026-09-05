@@ -372,3 +372,12 @@ class LocalUI:
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         pass
+
+
+def create_app() -> FastAPI:
+    """Factory function for gunicorn."""
+    config = ClientConfig.from_env()
+    chat_client = ChatClient(config)
+    file_manager = FileManager(config)
+    ui = LocalUI(config, chat_client, file_manager)
+    return ui.app
