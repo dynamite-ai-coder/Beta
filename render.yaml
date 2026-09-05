@@ -72,6 +72,18 @@ services:
         generateValue: true
       - key: DEBUG
         value: "false"
+      # Client config
+      - key: BACKEND_URL
+        value: "http://localhost:8000"
+      - key: LOCAL_UI_HOST
+        value: "0.0.0.0"
+      - key: LOCAL_UI_PORT
+        value: "23400"
+      - key: BROWSER_HEADLESS
+        value: "true"
+      # ngrok tunnel
+      - key: NGROK_AUTH_TOKEN
+        sync: false
 
 databases:
   - name: Beta-db
