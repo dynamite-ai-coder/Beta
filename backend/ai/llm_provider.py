@@ -12,6 +12,7 @@ from backend.ai.agent_roles import AgentRole, get_agent_prompt
 from backend.ai.cache import response_cache
 from backend.ai.models import AgentOutput
 from backend.config import settings
+from backend.monitoring.rate_monitor import rate_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,7 @@ class GroqAgentProvider:
                 key_pool.mark_used(key)
 
                 if result.success:
+                    rate_monitor.record_call(key, result.duration_ms, result.tokens_used)
                     response_cache.set(self.role.value, messages, {
                         "raw": result.raw_response,
                         "parsed": result.parsed,
@@ -116,6 +118,7 @@ class GroqAgentProvider:
 
                 last_error = result.error
                 if result.error and "Rate limited" in result.error:
+                    rate_monitor.record_error(key, is_rate_limit=True)
                     logger.warning(
                         f"Agent {self.role.value} rate limited on key...{key[-6:]}, "
                         f"retry {attempt + 1}/{MAX_RETRIES} in {delay:.1f}s"
@@ -123,6 +126,7 @@ class GroqAgentProvider:
                     await asyncio.sleep(delay)
                     continue
 
+                rate_monitor.record_error(key)
                 result.duration_ms = (time.monotonic() - start) * 1000
                 return result
 
