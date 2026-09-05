@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from backend.ai.agent_roles import AgentRole, get_agent_prompt
+from backend.ai.cache import response_cache
 from backend.ai.models import AgentOutput
 from backend.config import settings
 
@@ -83,6 +84,17 @@ class GroqAgentProvider:
         start = time.monotonic()
         messages = self._build_messages(user_message, context_summary)
 
+        cached = response_cache.get(self.role.value, messages, self.model)
+        if cached:
+            logger.debug("Cache hit for %s", self.role.value)
+            return AgentOutput(
+                agent=self.role, raw_response=cached.get("raw", ""),
+                parsed=cached.get("parsed", {}), success=True,
+                confidence=cached.get("confidence", 0.7),
+                tokens_used=cached.get("tokens", 0),
+                duration_ms=(time.monotonic() - start) * 1000,
+            )
+
         last_error = None
         for attempt in range(MAX_RETRIES):
             try:
@@ -93,6 +105,12 @@ class GroqAgentProvider:
                 key_pool.mark_used(key)
 
                 if result.success:
+                    response_cache.set(self.role.value, messages, {
+                        "raw": result.raw_response,
+                        "parsed": result.parsed,
+                        "confidence": result.confidence,
+                        "tokens": result.tokens_used,
+                    }, self.model)
                     result.duration_ms = (time.monotonic() - start) * 1000
                     return result
 
