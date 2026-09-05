@@ -100,9 +100,9 @@ services:
       - key: LOCAL_AI_ENABLED
         value: "true"
       - key: LOCAL_AI_MODEL
-        value: "/app/models/gemma-2b-it-q4_k_m.gguf"
+        value: "/app/models/phi-3-mini-4k-instruct-q4_k_m.gguf"
       - key: LOCAL_AI_CONTEXT
-        value: "2048"
+        value: "4096"
       - key: LOCAL_AI_MAX_TOKENS
         value: "512"
       - key: LOCAL_AI_THREADS

@@ -13,14 +13,14 @@ WORKDIR /app
 # Install llama-cpp-python with CPU only
 RUN pip install --no-cache-dir "llama-cpp-python>=0.3.0" httpx flask
 
-# Pre-download Gemma 2B model on build
+# Pre-download Phi-3-mini-4k-instruct model on build
 RUN mkdir -p /app/models && \
     python3 -c "
 import httpx, os
-url = 'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf'
-target = '/app/models/gemma-2b-it-q4_k_m.gguf'
+url = 'https://huggingface.co/bartowski/Phi-3-mini-4k-instruct-GGUF/resolve/main/Phi-3-mini-4k-instruct-Q4_K_M.gguf'
+target = '/app/models/phi-3-mini-4k-instruct-q4_k_m.gguf'
 if not os.path.exists(target):
-    print(f'Downloading Gemma 2B Q4_K_M...')
+    print(f'Downloading Phi-3-mini-4k-instruct Q4_K_M...')
     with httpx.Client(timeout=600, follow_redirects=True) as c:
         with c.stream('GET', url) as r:
             r.raise_for_status()
@@ -35,8 +35,8 @@ COPY local_ai_server.py .
 EXPOSE 8100
 
 ENV LOCAL_AI_ENABLED=true
-ENV LOCAL_AI_MODEL=/app/models/gemma-2b-it-q4_k_m.gguf
-ENV LOCAL_AI_CONTEXT=2048
+ENV LOCAL_AI_MODEL=/app/models/phi-3-mini-4k-instruct-q4_k_m.gguf
+ENV LOCAL_AI_CONTEXT=4096
 ENV LOCAL_AI_MAX_TOKENS=512
 ENV LOCAL_AI_THREADS=4
 

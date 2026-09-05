@@ -20,8 +20,8 @@ _llm = None
 _model_loaded = False
 _start_time = time.time()
 
-MODEL_PATH = os.environ.get("LOCAL_AI_MODEL", "/app/models/gemma-2b-it-q4_k_m.gguf")
-N_CTX = int(os.environ.get("LOCAL_AI_CONTEXT", "2048"))
+MODEL_PATH = os.environ.get("LOCAL_AI_MODEL", "/app/models/phi-3-mini-4k-instruct-q4_k_m.gguf")
+N_CTX = int(os.environ.get("LOCAL_AI_CONTEXT", "4096"))
 N_THREADS = int(os.environ.get("LOCAL_AI_THREADS", "4"))
 MAX_TOKENS = int(os.environ.get("LOCAL_AI_MAX_TOKENS", "512"))
 
