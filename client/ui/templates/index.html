@@ -237,6 +237,7 @@
                 <div class="typing" id="typing">
                     <div class="msg-avatar" style="background:var(--accent);color:#fff">B</div>
                     <div class="typing-dots"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
+                    <span style="font-size:12px;color:var(--text3)">Thinking...</span>
                 </div>
             </div>
         </div>
@@ -260,6 +261,10 @@
                         <button class="tool-btn" onclick="clearChat()" title="Clear chat">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                             Clear
+                        </button>
+                        <button class="tool-btn" onclick="exportChat()" title="Export chat">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                            Export
                         </button>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px">
@@ -322,6 +327,15 @@
                     <option value="20">20 FPS (High quality)</option>
                 </select>
             </div>
+            <div style="margin-bottom:16px;padding:12px;background:var(--bg2);border-radius:8px">
+                <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:8px">Keyboard Shortcuts</label>
+                <div style="font-size:12px;color:var(--text2);line-height:1.8">
+                    <div><code style="background:var(--surface);padding:2px 6px;border-radius:4px">Enter</code> Send message</div>
+                    <div><code style="background:var(--surface);padding:2px 6px;border-radius:4px">Shift+Enter</code> New line</div>
+                    <div><code style="background:var(--surface);padding:2px 6px;border-radius:4px">Ctrl+K</code> Focus input</div>
+                    <div><code style="background:var(--surface);padding:2px 6px;border-radius:4px">Ctrl+L</code> Clear chat</div>
+                </div>
+            </div>
             <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
                 <button class="btn" onclick="closeSettings()">Cancel</button>
                 <button class="btn btn-accent" onclick="saveSettings()">Save</button>
@@ -358,7 +372,7 @@
 
 <script>
 let fileContext='', isSending=false, activePlugin=null, previewImg=null, previewFps=15, previewStreaming=false;
-let frameCount=0, lastFpsTime=Date.now();
+let frameCount=0, lastFpsTime=Date.now(), chatHistory=[];
 
 const input=document.getElementById('chat-input');
 const sendBtn=document.getElementById('send-btn');
@@ -375,7 +389,11 @@ input.addEventListener('input',function(){
     document.getElementById('char-count').textContent=this.value.length;
 });
 
-function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!sendBtn.disabled)sendChat()}}
+function handleKey(e){
+    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!sendBtn.disabled)sendChat()}
+    if(e.ctrlKey&&e.key==='k'){e.preventDefault();input.focus();input.select()}
+    if(e.ctrlKey&&e.key==='l'){e.preventDefault();clearChat()}
+}
 function quickSend(text){input.value=text;input.dispatchEvent(new Event('input'));sendChat()}
 
 async function sendChat(){
@@ -386,24 +404,40 @@ async function sendChat(){
     document.getElementById('char-count').textContent='0';
     welcomeEl.style.display='none';
     addMessage(msg,'user');typingEl.classList.add('active');scrollToBottom();
+    const startTime=Date.now();
     try{
         const r=await fetch('/api/chat/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,file_context:fileContext})});
         const d=await r.json();
         typingEl.classList.remove('active');
-        if(r.ok&&d.response){addMessage(d.response,'assistant');fileContext=''}
+        const elapsed=((Date.now()-startTime)/1000).toFixed(1);
+        if(r.ok&&d.response){addMessage(d.response,'assistant',elapsed);fileContext=''}
         else addMessage('Something went wrong. Try again.','assistant');
     }catch(e){typingEl.classList.remove('active');addMessage('Connection error. Check if server is running.','assistant')}
     isSending=false;sendBtn.disabled=true;sendBtn.classList.remove('active','loading');
 }
 
-function addMessage(text,type){
+function addMessage(text,type,responseTime=null){
     const div=document.createElement('div');
     div.className='message '+type;
     const av=type==='user'?'Y':'B';
     const nm=type==='user'?'You':'Beta AI';
     const tm=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-    div.innerHTML=`<div class="msg-avatar">${av}</div><div class="msg-content"><div class="msg-name">${nm} <span style="font-weight:400;color:var(--text3);font-size:11px">${tm}</span></div><div class="msg-text">${fmt(text)}</div><div class="msg-actions"><button class="msg-action-btn" onclick="copyMsg(this)">Copy</button><button class="msg-action-btn" onclick="regenerateMsg(this)">Regenerate</button></div></div>`;
+    const timeStr=responseTime?` <span style="font-weight:400;color:var(--text3);font-size:10px">(${responseTime}s)</span>`:'';
+    div.innerHTML=`<div class="msg-avatar">${av}</div><div class="msg-content"><div class="msg-name">${nm} <span style="font-weight:400;color:var(--text3);font-size:11px">${tm}</span>${timeStr}</div><div class="msg-text">${fmt(text)}</div><div class="msg-actions"><button class="msg-action-btn" onclick="copyMsg(this)">Copy</button><button class="msg-action-btn" onclick="regenerateMsg(this)">Regenerate</button></div></div>`;
     messagesEl.appendChild(div);scrollToBottom();
+    chatHistory.push({text,type,time:Date.now()});
+    if(chatHistory.length>100)chatHistory=chatHistory.slice(-100);
+    try{localStorage.setItem('beta_chat',JSON.stringify(chatHistory.slice(-50)))}catch(e){}
+}
+
+function loadChatHistory(){
+    try{
+        const saved=JSON.parse(localStorage.getItem('beta_chat')||'[]');
+        if(saved.length>0){
+            welcomeEl.style.display='none';
+            saved.forEach(m=>{addMessage(m.text,m.type)});
+        }
+    }catch(e){}
 }
 
 function fmt(t){
@@ -422,8 +456,13 @@ function regenerateMsg(b){
 }
 function scrollToBottom(){document.getElementById('chat-area').scrollTop=document.getElementById('chat-area').scrollHeight}
 
-function newChat(){messagesEl.innerHTML='';welcomeEl.style.display='flex';typingEl.classList.remove('active');isSending=false}
+function newChat(){messagesEl.innerHTML='';welcomeEl.style.display='flex';typingEl.classList.remove('active');isSending=false;chatHistory=[];try{localStorage.removeItem('beta_chat')}catch(e){}}
 function clearChat(){newChat();fetch('/api/chat/clear',{method:'POST'}).catch(()=>{})}
+function exportChat(){
+    const text=chatHistory.map(m=>`[${m.type}] ${m.text}`).join('\n\n');
+    const blob=new Blob([text],{type:'text/plain'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='chat_export.txt';a.click();
+}
 
 /* Plugin menu */
 function togglePluginMenu(){
@@ -582,7 +621,7 @@ document.addEventListener('click',e=>{
     if(!e.target.closest('.plugin-dropdown'))closePluginMenu();
 });
 
-loadPlugins();checkStatus();loadSettings();setInterval(checkStatus,30000);
+loadPlugins();checkStatus();loadSettings();loadChatHistory();setInterval(checkStatus,30000);
 </script>
 </body>
 </html>
