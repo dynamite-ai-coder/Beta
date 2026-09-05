@@ -457,6 +457,11 @@ async def preprocess_prompt_async(message: str, file_context: str = "") -> tuple
     if not _is_complex_request(message, file_context):
         return message, ""
 
+    # 0. Try Groq accelerator first (fastest, highest throughput)
+    result = await _groq_preprocess(message, file_context)
+    if result and result != message:
+        return message, result
+
     # 1. Try remote local AI server (Beta-LocalAI on Render)
     result = await _remote_local_ai_preprocess(message, file_context)
     if result and result != message:

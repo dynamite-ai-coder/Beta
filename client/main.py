@@ -4,7 +4,8 @@ import asyncio
 import logging
 import signal
 import sys
-import threading
+
+import uvicorn
 
 from client.config import ClientConfig
 from client.ui import print_header, print_status
@@ -18,21 +19,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+_server: uvicorn.Server | None = None
 
-def _start_local_ui(
-    ui: LocalUI,
-    host: str,
-    port: int,
-) -> None:
-    thread = threading.Thread(
-        target=lambda: ui.app.run(host=host, port=port, debug=False, use_reloader=False),
-        daemon=True,
-    )
-    thread.start()
-    logger.info(f"Local Web UI: http://{host}:{port}")
+
+def _signal_handler(sig, frame):
+    global _server
+    if _server:
+        _server.should_exit = True
 
 
 async def main() -> None:
+    global _server
+
     config = ClientConfig.from_env()
     logging.getLogger().setLevel(getattr(logging, config.log_level, logging.INFO))
 
@@ -52,17 +50,22 @@ async def main() -> None:
     file_manager = FileManager(config)
 
     local_ui = LocalUI(config, chat_client, file_manager)
-    _start_local_ui(local_ui, config.local_ui_host, config.local_ui_port)
 
     print_status(f"Local Web UI: http://{config.local_ui_host}:{config.local_ui_port}")
     print_status("Client is ready. Open the URL above in your browser.")
     print_status("Press Ctrl+C to stop.")
 
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except (KeyboardInterrupt, asyncio.CancelledError):
-        logger.info("Shutting down...")
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
+
+    _server = uvicorn.Server(uvicorn.Config(
+        local_ui.app,
+        host=config.local_ui_host,
+        port=config.local_ui_port,
+        log_level="info",
+        access_log=False,
+    ))
+    await _server.serve()
 
 
 def run() -> None:

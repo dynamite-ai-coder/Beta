@@ -11,7 +11,13 @@ from pathlib import Path
 from typing import Any, Optional
 
 import httpx
-from flask import Flask, Response, jsonify, request, send_from_directory
+from fastapi import FastAPI, Request
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    Response,
+    StreamingResponse,
+)
 
 try:
     from PIL import Image
@@ -38,7 +44,7 @@ class LocalUI:
         self._config = config
         self._chat = chat_client
         self._files = file_manager
-        self._app = Flask("Beta Browser AI")
+        self._app = FastAPI(title="Beta Browser AI", docs_url=None, redoc_url=None)
         self._ws_clients: list = []
         self._browser_worker = None
         self._browser_preview = None
@@ -47,7 +53,7 @@ class LocalUI:
         self._setup_routes()
 
     @property
-    def app(self) -> Flask:
+    def app(self) -> FastAPI:
         return self._app
 
     def set_browser_worker(self, worker: Any) -> None:
@@ -63,18 +69,18 @@ class LocalUI:
     def _setup_routes(self) -> None:
         app = self._app
 
-        @app.route("/")
-        def index():
+        @app.get("/")
+        async def index():
             template = BASE_DIR / "templates" / "index.html"
-            return template.read_text(encoding="utf-8")
+            return HTMLResponse(template.read_text(encoding="utf-8"))
 
-        @app.route("/api/status")
-        def status():
+        @app.get("/api/status")
+        async def status():
             browser_ok = self._browser_worker is not None and self._browser_worker.is_ready if self._browser_worker else False
             ngrok_url = None
             try:
-                with httpx.Client(timeout=3.0) as c:
-                    r = c.get("http://localhost:4040/api/tunnels")
+                async with httpx.AsyncClient(timeout=3.0) as c:
+                    r = await c.get("http://localhost:4040/api/tunnels")
                     tunnels = r.json().get("tunnels", [])
                     for t in tunnels:
                         if t.get("proto") == "https":
@@ -82,7 +88,7 @@ class LocalUI:
                             break
             except Exception:
                 pass
-            return jsonify({
+            return JSONResponse({
                 "browser_connected": browser_ok,
                 "ai_connected": True,
                 "task_status": "idle",
@@ -90,169 +96,152 @@ class LocalUI:
                 "ngrok_url": ngrok_url,
             })
 
-        @app.route("/api/chat/history")
-        def chat_history():
-            return jsonify({"history": self._chat.history})
+        @app.get("/api/chat/history")
+        async def chat_history():
+            return JSONResponse({"history": self._chat.history})
 
-        @app.route("/api/chat/send", methods=["POST"])
-        def chat_send():
-            body = request.get_json(force=True)
+        @app.post("/api/chat/send")
+        async def chat_send(request: Request):
+            body = await request.json()
             message = body.get("message", "").strip()
             if not message:
-                return jsonify({"error": "Empty message"}), 400
+                return JSONResponse({"error": "Empty message"}, status_code=400)
 
             file_context = body.get("file_context", "")
-            loop = asyncio.new_event_loop()
-            try:
-                response = loop.run_until_complete(
-                    self._chat.send_message(message, file_context)
-                )
-            finally:
-                loop.close()
-            return jsonify({"response": response, "history": self._chat.history})
+            response = await self._chat.send_message(message, file_context)
+            return JSONResponse({"response": response, "history": self._chat.history})
 
-        @app.route("/api/chat/clear", methods=["POST"])
-        def chat_clear():
+        @app.post("/api/chat/clear")
+        async def chat_clear():
             self._chat.clear_history()
-            return jsonify({"status": "cleared"})
+            return JSONResponse({"status": "cleared"})
 
-        @app.route("/api/tor/toggle", methods=["POST"])
-        def tor_toggle():
-            body = request.get_json(force=True) if request.data else {}
+        @app.post("/api/tor/toggle")
+        async def tor_toggle(request: Request):
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
             enabled = body.get("enabled", False)
             try:
                 backend_url = os.environ.get("BACKEND_URL", "https://beta-fmp9.onrender.com")
                 token = os.environ.get("API_AUTH_TOKEN", "")
-                with httpx.Client(timeout=10) as client:
-                    r = client.post(
+                async with httpx.AsyncClient(timeout=10) as client:
+                    r = await client.post(
                         f"{backend_url}/api/tor/toggle",
                         headers={"Authorization": f"Bearer {token}"},
                         json={"enabled": enabled},
                     )
                     if r.status_code == 200:
-                        return jsonify({"status": "ok", "tor_enabled": enabled})
+                        return JSONResponse({"status": "ok", "tor_enabled": enabled})
             except Exception:
                 pass
-            return jsonify({"status": "ok", "tor_enabled": enabled, "note": "local only"})
+            return JSONResponse({"status": "ok", "tor_enabled": enabled, "note": "local only"})
 
-        @app.route("/api/upload", methods=["POST"])
-        def upload_file():
-            if "file" not in request.files:
-                return jsonify({"error": "No file"}), 400
-            f = request.files["file"]
-            content = f.read()
-            valid, msg = self._files.validate_file(f.filename or "unknown", len(content))
+        @app.post("/api/upload")
+        async def upload_file(request: Request):
+            form = await request.form()
+            if "file" not in form:
+                return JSONResponse({"error": "No file"}, status_code=400)
+            f = form["file"]
+            content = await f.read()
+            filename = f.filename or "unknown"
+            valid, msg = self._files.validate_file(filename, len(content))
             if not valid:
-                return jsonify({"error": msg}), 400
+                return JSONResponse({"error": msg}, status_code=400)
 
-            text = self._files.extract_text(f.filename or "unknown", content)
-            info = self._files.get_file_info(f.filename or "unknown", len(content))
-            return jsonify({
+            text = self._files.extract_text(filename, content)
+            info = self._files.get_file_info(filename, len(content))
+            return JSONResponse({
                 "status": "ok",
                 "file_info": info,
                 "extracted_text": text,
             })
 
-        @app.route("/api/browser/screenshot")
-        def browser_screenshot():
+        @app.get("/api/browser/screenshot")
+        async def browser_screenshot():
             if self._browser_preview and self._browser_worker:
-                loop = asyncio.new_event_loop()
-                try:
-                    b64 = loop.run_until_complete(
-                        self._browser_preview.capture(self._browser_worker)
-                    )
-                finally:
-                    loop.close()
+                b64 = await self._browser_preview.capture(self._browser_worker)
                 if b64:
-                    return jsonify({"screenshot": b64, "timestamp": time.time()})
-            return jsonify({"screenshot": None})
+                    return JSONResponse({"screenshot": b64, "timestamp": time.time()})
+            return JSONResponse({"screenshot": None})
 
-        @app.route("/api/browser/status")
-        def browser_status():
+        @app.get("/api/browser/status")
+        async def browser_status():
             if self._browser_worker:
-                loop = asyncio.new_event_loop()
-                try:
-                    url = loop.run_until_complete(
-                        self._browser_worker.get_current_url()
-                    ) if self._browser_worker.is_ready else ""
-                finally:
-                    loop.close()
-                return jsonify({
+                url = await self._browser_worker.get_current_url() if self._browser_worker.is_ready else ""
+                return JSONResponse({
                     "connected": self._browser_worker.is_ready,
                     "current_url": url,
                     "engine": self._config.browser_engine,
                 })
-            return jsonify({"connected": False, "current_url": "", "engine": self._config.browser_engine})
+            return JSONResponse({"connected": False, "current_url": "", "engine": self._config.browser_engine})
 
-        @app.route("/api/browser/navigate", methods=["POST"])
-        def browser_navigate():
-            body = request.get_json(force=True)
+        @app.post("/api/browser/navigate")
+        async def browser_navigate(request: Request):
+            body = await request.json()
             url = body.get("url", "")
             if not url:
-                return jsonify({"error": "No URL"}), 400
+                return JSONResponse({"error": "No URL"}, status_code=400)
             if not self._browser_worker or not self._browser_worker.is_ready:
-                return jsonify({"error": "Browser not ready"}), 503
-            loop = asyncio.new_event_loop()
-            try:
-                ok = loop.run_until_complete(self._browser_worker.navigate(url))
-            finally:
-                loop.close()
-            return jsonify({"status": "ok" if ok else "failed"})
+                return JSONResponse({"error": "Browser not ready"}, status_code=503)
+            ok = await self._browser_worker.navigate(url)
+            return JSONResponse({"status": "ok" if ok else "failed"})
 
-        @app.route("/api/preview/tasks")
-        def preview_tasks():
+        @app.get("/api/preview/tasks")
+        async def preview_tasks():
             try:
                 headers = {}
                 if self._config.api_token:
                     headers["Authorization"] = f"Bearer {self._config.api_token}"
-                with httpx.Client(timeout=10.0) as client:
-                    resp = client.get(
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
                         f"{self._config.backend_url}/api/v1/tasks",
                         headers=headers,
                         params={"limit": 5},
                     )
                     if resp.status_code == 200:
                         tasks = resp.json()
-                        return jsonify({"tasks": tasks, "current_task_id": self._current_task_id})
-                    return jsonify({"tasks": [], "error": f"Backend returned {resp.status_code}", "current_task_id": self._current_task_id})
+                        return JSONResponse({"tasks": tasks, "current_task_id": self._current_task_id})
+                    return JSONResponse({"tasks": [], "error": f"Backend returned {resp.status_code}", "current_task_id": self._current_task_id})
             except Exception as e:
                 logger.error(f"Preview tasks error: {e}")
-                return jsonify({"tasks": [], "error": str(e), "current_task_id": self._current_task_id})
+                return JSONResponse({"tasks": [], "error": str(e), "current_task_id": self._current_task_id})
 
-        @app.route("/api/preview/screenshot/<task_id>")
-        def preview_screenshot(task_id):
+        @app.get("/api/preview/screenshot/{task_id}")
+        async def preview_screenshot(task_id: str):
             try:
                 headers = {}
                 if self._config.api_token:
                     headers["Authorization"] = f"Bearer {self._config.api_token}"
-                with httpx.Client(timeout=10.0) as client:
-                    resp = client.get(
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
                         f"{self._config.backend_url}/v1/browser/screenshot/{task_id}",
                         headers=headers,
                     )
                     if resp.status_code == 200:
-                        return jsonify(resp.json())
-                    return jsonify({"screenshot": None, "error": f"Backend returned {resp.status_code}"})
+                        return JSONResponse(resp.json())
+                    return JSONResponse({"screenshot": None, "error": f"Backend returned {resp.status_code}"})
             except Exception as e:
                 logger.error(f"Preview screenshot error: {e}")
-                return jsonify({"screenshot": None, "error": str(e)})
+                return JSONResponse({"screenshot": None, "error": str(e)})
 
-        @app.route("/api/preview")
-        @app.route("/preview")
-        def preview_page():
+        @app.get("/api/preview")
+        @app.get("/preview")
+        async def preview_page():
             template = BASE_DIR / "templates" / "preview.html"
             if template.exists():
-                return template.read_text(encoding="utf-8")
-            return "<h1>Preview not available</h1>", 404
+                return HTMLResponse(template.read_text(encoding="utf-8"))
+            return HTMLResponse("<h1>Preview not available</h1>", status_code=404)
 
-        @app.route("/api/preview/auto_task")
-        def preview_auto_task():
+        @app.get("/api/preview/auto_task")
+        async def preview_auto_task():
             try:
                 headers = {}
                 if self._config.api_token:
                     headers["Authorization"] = f"Bearer {self._config.api_token}"
-                with httpx.Client(timeout=10.0) as client:
-                    resp = client.get(
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
                         f"{self._config.backend_url}/api/v1/tasks",
                         headers=headers,
                         params={"limit": 1, "state": "running"},
@@ -260,8 +249,8 @@ class LocalUI:
                     if resp.status_code == 200:
                         tasks = resp.json()
                         if tasks:
-                            return jsonify({"task_id": tasks[0]["task_id"], "state": tasks[0]["state"]})
-                    resp2 = client.get(
+                            return JSONResponse({"task_id": tasks[0]["task_id"], "state": tasks[0]["state"]})
+                    resp2 = await client.get(
                         f"{self._config.backend_url}/api/v1/tasks",
                         headers=headers,
                         params={"limit": 1},
@@ -269,31 +258,25 @@ class LocalUI:
                     if resp2.status_code == 200:
                         tasks2 = resp2.json()
                         if tasks2:
-                            return jsonify({"task_id": tasks2[0]["task_id"], "state": tasks2[0]["state"]})
+                            return JSONResponse({"task_id": tasks2[0]["task_id"], "state": tasks2[0]["state"]})
             except Exception as e:
                 logger.error(f"Auto task error: {e}")
-            return jsonify({"task_id": None, "state": None})
+            return JSONResponse({"task_id": None, "state": None})
 
-        @app.route("/api/preview/stream")
-        def preview_stream():
-            url = request.args.get("url", "https://example.com")
-            fps = max(1, min(int(request.args.get("fps", 15)), 30))
+        @app.get("/api/preview/stream")
+        async def preview_stream(request: Request):
+            url = request.query_params.get("url", "https://example.com")
+            fps = max(1, min(int(request.query_params.get("fps", 15)), 30))
             interval = 1.0 / fps
 
-            def generate():
+            async def generate():
                 from client.plugins.manager import plugin_manager
                 screenshot_plugin = plugin_manager.get("screenshot")
 
                 while True:
                     try:
                         if screenshot_plugin:
-                            loop = asyncio.new_event_loop()
-                            try:
-                                result = loop.run_until_complete(
-                                    screenshot_plugin.execute(action="capture", url=url, width=320, height=220)
-                                )
-                            finally:
-                                loop.close()
+                            result = await screenshot_plugin.execute(action="capture", url=url, width=320, height=220)
                             b64 = result.get("screenshot", "")
                             if b64:
                                 jpeg_bytes = base64.b64decode(b64)
@@ -315,64 +298,58 @@ class LocalUI:
                     except Exception as e:
                         logger.debug(f"Stream frame error: {e}")
 
-                    time.sleep(interval)
+                    await asyncio.sleep(interval)
 
-            return Response(
+            return StreamingResponse(
                 generate(),
-                mimetype="multipart/x-mixed-replace; boundary=frame",
+                media_type="multipart/x-mixed-replace; boundary=frame",
                 headers={
                     "Cache-Control": "no-cache, no-store, must-revalidate",
                     "X-Accel-Buffering": "no",
                 },
             )
 
-        @app.route("/api/plugins")
-        def list_plugins():
+        @app.get("/api/plugins")
+        async def list_plugins():
             from client.plugins.manager import plugin_manager
-            return jsonify({"plugins": plugin_manager.list_all()})
+            return JSONResponse({"plugins": plugin_manager.list_all()})
 
-        @app.route("/api/plugins/execute", methods=["POST"])
-        def execute_plugin():
-            body = request.get_json(force=True)
+        @app.post("/api/plugins/execute")
+        async def execute_plugin(request: Request):
+            body = await request.json()
             plugin_name = body.get("name", "")
             action = body.get("action", "")
             params = body.get("params", {})
             if not plugin_name:
-                return jsonify({"error": "Plugin name required"}), 400
+                return JSONResponse({"error": "Plugin name required"}, status_code=400)
             from client.plugins.manager import plugin_manager
-            loop = asyncio.new_event_loop()
-            try:
-                result = loop.run_until_complete(
-                    plugin_manager.execute(plugin_name, action=action, **params)
-                )
-            finally:
-                loop.close()
-            return jsonify(result)
+            result = await plugin_manager.execute(plugin_name, action=action, **params)
+            return JSONResponse(result)
 
-        @app.route("/api/localai/status")
-        def local_ai_status():
+        @app.get("/api/localai/status")
+        async def local_ai_status():
             from client.local_ai import get_status
-            return jsonify(get_status())
+            return JSONResponse(get_status())
 
-        @app.route("/api/ngrok")
-        def ngrok_info():
+        @app.get("/api/ngrok")
+        async def ngrok_info():
             try:
-                with httpx.Client(timeout=3.0) as c:
-                    r = c.get("http://localhost:4040/api/tunnels")
+                async with httpx.AsyncClient(timeout=3.0) as c:
+                    r = await c.get("http://localhost:4040/api/tunnels")
                     tunnels = r.json().get("tunnels", [])
                     for t in tunnels:
                         if t.get("proto") == "https":
-                            return jsonify({"url": t["public_url"], "status": "active"})
+                            return JSONResponse({"url": t["public_url"], "status": "active"})
             except Exception:
                 pass
-            return jsonify({"url": None, "status": "not running"})
+            return JSONResponse({"url": None, "status": "not running"})
 
-        @app.route("/api/run", methods=["POST"])
-        def run_command():
-            body = request.get_json(force=True)
+        @app.post("/api/run")
+        async def run_command(request: Request):
+            body = await request.json()
             command = body.get("command", "")
             if not command:
-                return jsonify({"error": "command required"}), 400
+                return JSONResponse({"error": "command required"}, status_code=400)
             try:
                 import subprocess
                 proc = subprocess.run(
@@ -382,16 +359,16 @@ class LocalUI:
                     timeout=60,
                     cwd=str(Path.cwd()),
                 )
-                return jsonify({
+                return JSONResponse({
                     "result": proc.stdout.decode(errors="replace").strip(),
                     "error": proc.stderr.decode(errors="replace").strip(),
                     "returncode": proc.returncode,
                     "success": proc.returncode == 0,
                 })
             except subprocess.TimeoutExpired:
-                return jsonify({"result": "", "error": "Command timed out (60s)", "returncode": -1, "success": False})
+                return JSONResponse({"result": "", "error": "Command timed out (60s)", "returncode": -1, "success": False})
             except Exception as e:
-                return jsonify({"result": "", "error": str(e), "returncode": -1, "success": False})
+                return JSONResponse({"result": "", "error": str(e), "returncode": -1, "success": False})
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         pass

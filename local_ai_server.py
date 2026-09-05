@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Beta Local AI Server - Gemma 2B preprocessor
+Beta Local AI Server - Phi-3-mini-4k-instruct preprocessor
 Runs as standalone service, exposes HTTP API for prompt preprocessing.
 """
 from __future__ import annotations
@@ -10,12 +10,14 @@ import os
 import time
 from pathlib import Path
 
-from flask import Flask, jsonify, request
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-app = Flask("Beta-LocalAI")
+app = FastAPI(title="Beta-LocalAI", docs_url=None, redoc_url=None)
 _llm = None
 _model_loaded = False
 _start_time = time.time()
@@ -95,49 +97,59 @@ def _preprocess(message: str, file_context: str = "") -> str:
     return ""
 
 
-@app.route("/health")
-def health():
-    return jsonify({
+@app.on_event("startup")
+async def startup():
+    _load_model()
+
+
+@app.get("/health")
+async def health():
+    return JSONResponse({
         "status": "ok",
         "model_loaded": _llm is not None,
         "model_path": MODEL_PATH,
+        "model_name": "Phi-3-mini-4k-instruct",
         "uptime": int(time.time() - _start_time),
     })
 
 
-@app.route("/v1/preprocess", methods=["POST"])
-def preprocess():
-    body = request.get_json(force=True)
+@app.post("/v1/preprocess")
+async def preprocess(request: Request):
+    body = await request.json()
     message = body.get("message", "")
     file_context = body.get("file_context", "")
 
     if not message:
-        return jsonify({"error": "No message"}), 400
+        return JSONResponse({"error": "No message"}, status_code=400)
 
     if not _llm:
         if not _load_model():
-            return jsonify({"error": "Model not loaded", "processed": ""}), 503
+            return JSONResponse({"error": "Model not loaded", "processed": ""}, status_code=503)
 
+    t0 = time.time()
     processed = _preprocess(message, file_context)
-    return jsonify({
+    latency = time.time() - t0
+
+    return JSONResponse({
         "original": message,
         "processed": processed,
         "used_local_ai": bool(processed),
+        "latency_ms": int(latency * 1000),
     })
 
 
-@app.route("/v1/chat/completions", methods=["POST"])
-def chat_completions():
-    """OpenAI-compatible endpoint for simple chat (uses local model)."""
-    body = request.get_json(force=True)
+@app.post("/v1/chat/completions")
+async def chat_completions(request: Request):
+    """OpenAI-compatible endpoint for simple chat."""
+    body = await request.json()
     messages = body.get("messages", [])
 
     if not messages:
-        return jsonify({"error": "No messages"}), 400
+        return JSONResponse({"error": "No messages"}, status_code=400)
 
     if not _llm:
         if not _load_model():
-            return jsonify({"error": "Model not loaded"}), 503
+            return JSONResponse({"error": "Model not loaded"}, status_code=503)
 
     try:
         response = _llm.create_chat_completion(
@@ -145,13 +157,12 @@ def chat_completions():
             max_tokens=body.get("max_tokens", MAX_TOKENS),
             temperature=body.get("temperature", 0.3),
         )
-        return jsonify(response)
+        return JSONResponse(response)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 if __name__ == "__main__":
     port = int(os.environ.get("LOCAL_AI_PORT", "8100"))
     logger.info("Beta Local AI Server starting on port %d...", port)
-    _load_model()
-    app.run(host="0.0.0.0", port=port, debug=False)
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
