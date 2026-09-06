@@ -18,6 +18,8 @@ class BrowserPreview:
         self._last_screenshot: Optional[bytes] = None
         self._last_screenshot_time: float = 0
         self._min_interval = 1.0 / max(config.browser_preview_fps, 1)
+        self._preview_width = 1280
+        self._preview_height = 720
 
     async def capture(self, browser_worker) -> Optional[str]:
         if not self._config.browser_preview_enabled:
@@ -44,13 +46,12 @@ class BrowserPreview:
         try:
             from PIL import Image
             img = Image.open(io.BytesIO(data))
-            max_w = self._config.browser_preview_max_width
-            if img.width > max_w:
-                ratio = max_w / img.width
-                new_h = int(img.height * ratio)
-                img = img.resize((max_w, new_h), Image.LANCZOS)
+            target_w = self._preview_width
+            target_h = self._preview_height
+            if img.width != target_w or img.height != target_h:
+                img = img.resize((target_w, target_h), Image.LANCZOS)
             buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=self._config.browser_preview_quality, optimize=True)
+            img.save(buf, format="JPEG", quality=85, optimize=True)
             return buf.getvalue()
         except ImportError:
             return data

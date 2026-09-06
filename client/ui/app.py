@@ -276,16 +276,16 @@ class LocalUI:
                 while True:
                     try:
                         if screenshot_plugin:
-                            result = await screenshot_plugin.execute(action="capture", url=url, width=320, height=220)
+                            result = await screenshot_plugin.execute(action="capture", url=url, width=1280, height=720)
                             b64 = result.get("screenshot", "")
                             if b64:
                                 jpeg_bytes = base64.b64decode(b64)
                                 if _HAS_PIL:
                                     try:
                                         img = Image.open(io.BytesIO(jpeg_bytes))
-                                        img = img.resize((320, 220), Image.LANCZOS)
+                                        img = img.resize((1280, 720), Image.LANCZOS)
                                         buf = io.BytesIO()
-                                        img.save(buf, format="JPEG", quality=70, optimize=True)
+                                        img.save(buf, format="JPEG", quality=85, optimize=True)
                                         jpeg_bytes = buf.getvalue()
                                     except Exception:
                                         pass

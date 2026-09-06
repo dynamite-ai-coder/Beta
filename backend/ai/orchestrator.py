@@ -21,10 +21,75 @@ from backend.ai.models import (
     VirtualAIChoice, VirtualAIUsage, BrowserTaskRequest,
 )
 from backend.config import settings
+from backend.plugins.executor import execute_plugin, get_tools_description
 
 logger = logging.getLogger(__name__)
 
 WORKFLOW_TIMEOUT = 180
+
+import re as _re
+import httpx as _httpx
+
+TOOLS_DESC = get_tools_description()
+
+
+def _extract_tool_calls(text: str) -> list[dict]:
+    """Extract tool calls from agent response. Looks for ```tool blocks or inline JSON."""
+    calls = []
+    for match in _re.finditer(r'```tool\s*\n(.*?)\n```', text, _re.DOTALL):
+        try:
+            call = json.loads(match.group(1).strip())
+            if "plugin" in call and "action" in call:
+                calls.append(call)
+        except json.JSONDecodeError:
+            pass
+    for match in _re.finditer(r'"use_tool"\s*:\s*(\{[^}]+\})', text):
+        try:
+            call = json.loads(match.group(1))
+            if "plugin" in call and "action" in call:
+                calls.append(call)
+        except json.JSONDecodeError:
+            pass
+    return calls
+
+
+async def _execute_web_search(query: str, search_type: str = "web") -> str:
+    """Execute a web search and return results as text."""
+    try:
+        async with _httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            if search_type == "wikipedia":
+                r = await client.get(
+                    f"https://en.wikipedia.org/api/rest_v1/page/summary/{query}",
+                    headers={"User-Agent": "BetaBot/1.0"},
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    return data.get("extract", f"No Wikipedia result for: {query}")
+                return f"No Wikipedia result for: {query}"
+
+            r = await client.get(
+                "https://html.duckduckgo.com/html/",
+                params={"q": query},
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"},
+            )
+            text = r.text
+            results = []
+            for match in _re.finditer(
+                r'class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>.*?class="result__snippet"[^>]*>(.*?)</(?:a|td|span|div)',
+                text, _re.DOTALL
+            ):
+                url, title, snippet = match.groups()
+                title = _re.sub(r'<[^>]+>', '', title).strip()
+                snippet = _re.sub(r'<[^>]+>', '', snippet).strip()
+                if title:
+                    results.append(f"{title}: {snippet} ({url})")
+                if len(results) >= 5:
+                    break
+            if results:
+                return "Search results:\n" + "\n".join(f"- {r}" for r in results)
+            return f"No search results found for: {query}"
+    except Exception as e:
+        return f"Search error: {e}"
 
 
 class AIOrchestrator:
@@ -225,12 +290,18 @@ class AIOrchestrator:
                 find_data = extract_findings(AgentMsg(t=MsgType.FIND, src=0, dst=0, payload=parsed)) if "f" in parsed else parsed
                 ctx.evidence.extend(find_data.get("evidence", find_data.get("e", []))[:settings.max_evidence_items])
                 ctx.facts.extend(find_data.get("findings", find_data.get("f", []))[:5])
+                search_action = parsed.get("search")
+                if search_action and search_action.get("q"):
+                    ctx.search_requests.append(search_action)
             elif role == AgentRole.SOLVER:
                 sol_data = extract_solution(AgentMsg(t=MsgType.SOLVE, src=0, dst=0, payload=parsed)) if "s" in parsed else parsed
                 ctx.confidence = float(sol_data.get("confidence", sol_data.get("c", 0.7)))
                 actions = sol_data.get("browser_actions", sol_data.get("ba", []))
                 if ctx.needs_browser and actions:
                     ctx.browser_task_payload = {"task_id": ctx.task_id, "actions": actions}
+                search_action = parsed.get("search")
+                if search_action and search_action.get("q"):
+                    ctx.search_requests.append(search_action)
             elif role == AgentRole.CRITIC:
                 check_data = extract_check(AgentMsg(t=MsgType.CHECK, src=0, dst=0, payload=parsed)) if "ok" in parsed else parsed
         else:
@@ -253,6 +324,20 @@ class AIOrchestrator:
             )
             if ctx.errors:
                 prompt += f"\n\nCritic issues: {json.dumps(ctx.errors[:5])}"
+        elif role == AgentRole.RESEARCHER:
+            prompt = f"Original request: {ctx.original_request}"
+            if ctx.plan:
+                prompt += f"\nPlan: {', '.join(ctx.plan[:5])}"
+            if ctx.search_results:
+                prompt += f"\n\nPREVIOUS SEARCH RESULTS:\n{ctx.search_results}"
+        elif role == AgentRole.SOLVER:
+            prompt = f"Original request: {ctx.original_request}\nPlan: {', '.join(ctx.plan[:5])}"
+            if ctx.evidence:
+                prompt += f"\nEvidence: {', '.join(ctx.evidence[:5])}"
+            if ctx.search_results:
+                prompt += f"\n\nSEARCH RESULTS:\n{ctx.search_results}"
+            if ctx.errors:
+                prompt += f"\nKnown issues: {', '.join(ctx.errors[:3])}"
         else:
             prompt = f"Original request: {ctx.original_request}\nPlan: {', '.join(ctx.plan[:5])}"
             if ctx.evidence:
@@ -260,8 +345,25 @@ class AIOrchestrator:
             if ctx.errors:
                 prompt += f"\nKnown issues: {', '.join(ctx.errors[:3])}"
 
+        prompt += f"\n\n{TOOLS_DESC}"
+
         try:
-            return await agent.chat(prompt, context_summary)
+            output = await agent.chat(prompt, context_summary)
+            if output.success:
+                tool_calls = _extract_tool_calls(output.raw_response)
+                for tc in tool_calls[:3]:
+                    plugin_name = tc.get("plugin", "")
+                    action = tc.get("action", "")
+                    params = tc.get("params", {})
+                    if plugin_name and action:
+                        logger.info(f"Executing tool: {plugin_name}/{action}")
+                        result = await execute_plugin(plugin_name, action, params)
+                        result_text = json.dumps(result, ensure_ascii=False, default=str)[:2000]
+                        ctx.tool_outputs.append({"plugin": plugin_name, "action": action, "result": result_text})
+                        if plugin_name == "websearch":
+                            ctx.search_results += f"\n{result_text}"
+                            ctx.evidence.append(result_text[:500])
+            return output
         except Exception as e:
             logger.error(f"Agent {role.value} exception: {e}")
             return AgentOutput(

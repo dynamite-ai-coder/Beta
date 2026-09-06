@@ -116,7 +116,7 @@
         /* Selenium preview modal */
         .preview-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center}
         .preview-overlay.active{display:flex}
-        .preview-modal{width:90%;max-width:1100px;height:80%;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;display:flex;flex-direction:column}
+        .preview-modal{width:90%;max-width:1300px;height:85%;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;display:flex;flex-direction:column}
         .preview-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg2)}
         .preview-title{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
         .preview-title .live-dot{width:8px;height:8px;border-radius:50%;background:var(--red);animation:pulse 1.5s infinite}
@@ -127,7 +127,7 @@
         .preview-close{width:30px;height:30px;border-radius:6px;background:var(--surface2);border:none;color:var(--text2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
         .preview-close:hover{background:var(--red);color:#fff}
         .preview-body{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000;position:relative}
-        .preview-body img{max-width:100%;max-height:100%;object-fit:contain}
+        .preview-body img{max-width:100%;max-height:100%;object-fit:contain;border-radius:4px}
         .preview-placeholder{color:var(--text3);text-align:center;font-size:14px;padding:20px}
         .preview-badge{position:absolute;top:10px;left:10px;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;display:none;letter-spacing:.5px}
         .preview-badge.on{display:block}
@@ -348,7 +348,7 @@
 <div class="preview-overlay" id="preview-overlay" onclick="if(event.target===this)closePreview()">
     <div class="preview-modal">
         <div class="preview-header">
-            <div class="preview-title"><span class="live-dot"></span>Selenium Browser Preview</div>
+            <div class="preview-title"><span class="live-dot"></span>Selenium Browser Preview (720p)</div>
             <div class="preview-controls">
                 <input type="text" id="preview-url" value="https://example.com" placeholder="Enter URL...">
                 <select id="fps-sel" onchange="setPreviewFps(this.value)">
@@ -363,7 +363,7 @@
             </div>
         </div>
         <div class="preview-body" id="preview-body">
-            <div class="preview-placeholder" id="preview-placeholder">Enter a URL and click <b>Start</b> to stream the browser</div>
+            <div class="preview-placeholder" id="preview-placeholder">Enter a URL and click <b>Start</b> to stream the browser (720p)</div>
             <div class="preview-badge" id="preview-badge">LIVE</div>
             <div class="preview-fps" id="preview-fps"></div>
         </div>

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import signal
 from typing import Any
 
 from backend.config import settings
@@ -16,6 +18,9 @@ CHROMIUM_PATHS = [
     "/usr/bin/google-chrome-stable",
     "/snap/bin/chromium",
 ]
+
+_xvfb_process: subprocess.Popen | None = None
+_xvfb_display: int = 99
 
 _selenium_available = None
 _uc_available = None
@@ -42,6 +47,59 @@ def _check_uc() -> bool:
         except ImportError:
             _uc_available = False
     return _uc_available
+
+
+def start_xvfb(display: int = 99, width: int = 1280, height: int = 720) -> str:
+    """Start Xvfb virtual display for GUI mode on headless servers."""
+    global _xvfb_process, _xvfb_display
+    _xvfb_display = display
+
+    if _xvfb_process and _xvfb_process.poll() is None:
+        os.environ["DISPLAY"] = f":{display}"
+        return f":{display}"
+
+    try:
+        xvfb_path = None
+        for p in ["/usr/bin/Xvfb", "/usr/bin/xvfb-run"]:
+            if os.path.exists(p):
+                xvfb_path = p
+                break
+        if not xvfb_path:
+            from shutil import which
+            xvfb_path = which("Xvfb") or which("xvfb-run")
+
+        if not xvfb_path:
+            logger.warning("Xvfb not found - falling back to headless mode")
+            return ""
+
+        _xvfb_process = subprocess.Popen(
+            [xvfb_path, f":{display}", "-screen", "0", f"{width}x{height}x24",
+             "-ac", "+extension", "GLX", "+render", "-noreset"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        os.environ["DISPLAY"] = f":{display}"
+        logger.info(f"Xvfb started on display :{display} ({width}x{height})")
+        return f":{display}"
+    except Exception as e:
+        logger.warning(f"Failed to start Xvfb: {e}")
+        return ""
+
+
+def stop_xvfb():
+    """Stop Xvfb virtual display."""
+    global _xvfb_process
+    if _xvfb_process and _xvfb_process.poll() is None:
+        try:
+            _xvfb_process.terminate()
+            _xvfb_process.wait(timeout=5)
+        except Exception:
+            try:
+                _xvfb_process.kill()
+            except Exception:
+                pass
+        _xvfb_process = None
+        logger.info("Xvfb stopped")
 
 
 def find_browser_executable() -> str:
@@ -113,7 +171,16 @@ def create_browser(proxy_url: str | None = None) -> Any:
 
     options = Options()
 
-    if settings.headless:
+    use_headless = settings.headless
+    if not use_headless:
+        display = start_xvfb(width=1280, height=720)
+        if display:
+            logger.info(f"Running Chrome in GUI mode on display {display}")
+        else:
+            use_headless = True
+            logger.info("Xvfb unavailable, falling back to headless mode")
+
+    if use_headless:
         options.add_argument("--headless=new")
 
     options.add_argument("--no-sandbox")
@@ -183,7 +250,7 @@ def create_browser(proxy_url: str | None = None) -> Any:
             import undetected_chromedriver as uc
             driver = uc.Chrome(
                 options=options,
-                headless=settings.headless,
+                headless=use_headless,
                 version_main=None,
                 use_subprocess=True,
             )

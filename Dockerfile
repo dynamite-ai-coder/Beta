@@ -21,6 +21,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libatspi2.0-0 \
     fonts-liberation \
     tor \
+    xvfb \
+    x11-utils \
+    x11-xserver-utils \
+    python3-opengl \
+    libgl1-mesa-glx \
+    libgl1-mesa-dri \
     && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -44,7 +50,7 @@ EXPOSE 8000 23400
 ENV MALLOC_TRIM_THRESHOLD_=65536
 ENV MALLOC_MMAP_THRESHOLD_=65536
 ENV MALLOC_MMAP_MAX_=0
-ENV BROWSER_HEADLESS=true
+ENV BROWSER_HEADLESS=false
 ENV USE_TOR=false
 ENV LOCAL_UI_HOST=0.0.0.0
 ENV LOCAL_UI_PORT=23400

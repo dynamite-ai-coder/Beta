@@ -85,7 +85,7 @@ services:
       - key: LOCAL_UI_PORT
         value: "23400"
       - key: BROWSER_HEADLESS
-        value: "true"
+        value: "false"
       - key: NGROK_AUTH_TOKEN
         sync: false
       - key: LOCAL_AI_URL

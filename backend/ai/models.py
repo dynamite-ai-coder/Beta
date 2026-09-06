@@ -43,6 +43,9 @@ class AIContext(BaseModel):
     final_answer: str = ""
     needs_browser: bool = False
     browser_task_payload: Optional[dict[str, Any]] = None
+    search_requests: list[dict[str, Any]] = Field(default_factory=list)
+    search_results: str = ""
+    tool_outputs: list[dict[str, Any]] = Field(default_factory=list)
     deliberation_round: int = 0
     max_deliberation_rounds: int = 2
 

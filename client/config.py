@@ -25,7 +25,7 @@ class ClientConfig:
     task_timeout: int = 300
 
     # Local Web UI
-    local_ui_host: str = "127.0.0.1"
+    local_ui_host: str = "0.0.0.0"
     local_ui_port: int = 23400
 
     # Browser preview
@@ -53,7 +53,7 @@ class ClientConfig:
 
     @classmethod
     def from_env(cls) -> ClientConfig:
-        backend_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
+        backend_url = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
         ws_url = backend_url.replace("https://", "wss://").replace("http://", "ws://")
         return cls(
             backend_url=backend_url,
@@ -65,7 +65,7 @@ class ClientConfig:
             browser_profile_path=os.environ.get("BROWSER_PROFILE_PATH", ""),
             log_level=os.environ.get("LOG_LEVEL", "INFO"),
             task_timeout=int(os.environ.get("TASK_TIMEOUT", "300")),
-            local_ui_host=os.environ.get("LOCAL_UI_HOST", "127.0.0.1"),
+            local_ui_host=os.environ.get("LOCAL_UI_HOST", "0.0.0.0"),
             local_ui_port=int(os.environ.get("LOCAL_UI_PORT", "23400")),
             browser_preview_enabled=os.environ.get("BROWSER_PREVIEW_ENABLED", "true").lower() == "true",
             browser_preview_fps=int(os.environ.get("BROWSER_PREVIEW_FPS", "2")),
