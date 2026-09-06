@@ -179,6 +179,7 @@ CLIENT_PATHS = (
     "/api/localai/",
     "/api/plugins",
     "/api/preview/",
+    "/api/browser/",
 )
 
 
@@ -238,6 +239,11 @@ async def proxy_ui(request: Request, path: str = ""):
 )
 async def proxy_client_api(request: Request, path: str = ""):
     req_path = f"/{path}"
+    if req_path.startswith("/v1/") or req_path.startswith("/api/v1/"):
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "Not found"},
+        )
     if req_path == "/api/status":
         now = time.monotonic()
         async with _status_cache_lock:
