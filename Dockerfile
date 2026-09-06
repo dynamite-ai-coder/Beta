@@ -24,9 +24,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
     x11-utils \
     x11-xserver-utils \
-    python3-opengl \
-    libgl1-mesa-glx \
-    libgl1-mesa-dri \
     && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
