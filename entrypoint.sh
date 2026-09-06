@@ -3,9 +3,9 @@ set -e
 
 echo "[entrypoint] Beta starting..."
 echo "[entrypoint] LOCAL_UI_HOST=${LOCAL_UI_HOST:-0.0.0.0}"
-echo "[entrypoint] BACKEND_URL=${BACKEND_URL:-http://localhost:8000}"
+echo "[entrypoint] BACKEND_URL=${BACKEND_URL:-http://127.0.0.1:8000}"
 
-export CLIENT_URL="${CLIENT_URL:-http://localhost:23400}"
+export CLIENT_URL="${CLIENT_URL:-http://127.0.0.1:23400}"
 
 # Start Tor if enabled
 if [ "$USE_TOR" = "true" ] || [ "$USE_TOR" = "1" ]; then
@@ -39,7 +39,7 @@ BACKEND_PID=$!
 
 # Wait for backend to be ready
 for i in $(seq 1 30); do
-    if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+    if curl -sf http://127.0.0.1:8000/health > /dev/null 2>&1; then
         echo "[entrypoint] Backend ready"
         break
     fi
@@ -53,7 +53,7 @@ CLIENT_PID=$!
 
 # Wait for client to be ready
 for i in $(seq 1 15); do
-    if curl -sf http://localhost:23400/api/status > /dev/null 2>&1; then
+    if curl -sf http://127.0.0.1:23400/api/status > /dev/null 2>&1; then
         echo "[entrypoint] Client ready"
         break
     fi

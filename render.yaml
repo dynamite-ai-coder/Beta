@@ -79,7 +79,7 @@ services:
       - key: LANGUAGE
         value: "pl"
       - key: BACKEND_URL
-        value: "http://localhost:8000"
+        value: "http://127.0.0.1:8000"
       - key: LOCAL_UI_HOST
         value: "0.0.0.0"
       - key: LOCAL_UI_PORT
