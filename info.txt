@@ -93,8 +93,8 @@ nohup python -m client > /tmp/client.log 2>&1 &
 
 ## RENDER DEPLOY
 - Service ID: srv-dae2mq5bedkc73b3pjp0
-- API Key: rnd_nglusem4WZofG64JH9imWTGiJEjL
-- Trigger: `curl -X POST "https://api.render.com/v1/services/srv-dae2mq5bedkc73b3pjp0/deploys" -H "Authorization: Bearer rnd_nglusem4WZofG64JH9imWTGiJEjL" -H "Content-Type: application/json" -d '{"clear_cache":"false"}'`
+- Trigger: deploy through Render dashboard or external CI using RENDER_API_KEY.
+- Render API key: configure outside the repository (not stored in this file).
 
 ## RECENT CHANGES
 - commit e1e7d00: "feat: enhance browser automation, AI agents, and client UI"
