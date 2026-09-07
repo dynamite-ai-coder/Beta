@@ -353,6 +353,8 @@ class LocalUI:
 
         @app.post("/api/plugins/execute")
         async def execute_plugin(request: Request):
+            if not self._config.allow_remote_execution:
+                return JSONResponse({"error": "Remote plugin execution is disabled"}, status_code=403)
             body = await request.json()
             plugin_name = body.get("name", "")
             action = body.get("action", "")
@@ -383,6 +385,8 @@ class LocalUI:
 
         @app.post("/api/run")
         async def run_command(request: Request):
+            if not self._config.allow_remote_execution:
+                return JSONResponse({"error": "Remote command execution is disabled"}, status_code=403)
             body = await request.json()
             command = body.get("command", "")
             if not command:

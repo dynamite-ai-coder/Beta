@@ -43,6 +43,8 @@ class ClientConfig:
 
     # API auth for backend
     api_token: str = ""
+    # Remote plugin and shell execution is disabled unless explicitly enabled.
+    allow_remote_execution: bool = False
 
     # Local AI (optional preprocessor)
     local_ai_enabled: bool = False
@@ -61,6 +63,7 @@ class ClientConfig:
             client_id=os.environ.get("CLIENT_ID", f"beta-client-{os.getpid()}"),
             client_token=os.environ.get("CLIENT_TOKEN", ""),
             api_token=os.environ.get("API_AUTH_TOKEN", ""),
+            allow_remote_execution=os.environ.get("PLUGIN_EXECUTION_ENABLED", "false").lower() == "true",
             browser_headless=os.environ.get("BROWSER_HEADLESS", "true").lower() == "true",
             browser_profile_path=os.environ.get("BROWSER_PROFILE_PATH", ""),
             log_level=os.environ.get("LOG_LEVEL", "INFO"),

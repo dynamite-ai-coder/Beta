@@ -130,6 +130,7 @@ class TestClientUI:
         config = ClientConfig()
         assert config.local_ui_host == "127.0.0.1"
         assert config.local_ui_port == 23400
+        assert config.allow_remote_execution is False
 
     def test_chat_client_history(self):
         from client.config import ClientConfig
