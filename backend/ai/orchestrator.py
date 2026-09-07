@@ -183,6 +183,8 @@ class AIOrchestrator:
 
                 if judge_output.success:
                     ctx.final_answer = judge_output.raw_response
+                else:
+                    logger.warning(f"Judge failed in loop: {judge_output.error}")
 
                 if critic_output.success:
                     parsed = critic_output.parsed
@@ -225,7 +227,7 @@ class AIOrchestrator:
                     ctx.final_answer = judge_output.raw_response
                 break
 
-        if AgentRole.JUDGE not in ctx.agent_outputs:
+        if AgentRole.JUDGE not in ctx.agent_outputs or not ctx.agent_outputs.get(AgentRole.JUDGE, AgentOutput(agent=AgentRole.JUDGE, success=False)).success:
             if AgentRole.JUDGE in decision.agents:
                 judge_output = await self._run_agent(AgentRole.JUDGE, ctx)
                 ctx.agent_outputs["judge"] = judge_output
@@ -236,6 +238,9 @@ class AIOrchestrator:
                     ctx.final_answer = self._build_fallback_answer(ctx)
             else:
                 ctx.final_answer = self._build_fallback_answer(ctx)
+
+        if not ctx.final_answer:
+            ctx.final_answer = self._build_fallback_answer(ctx)
 
         ctx.state = "completed"
         latency_ms = (time.monotonic() - workflow_start) * 1000

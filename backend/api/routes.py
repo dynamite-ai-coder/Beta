@@ -38,9 +38,12 @@ def _extract_plain_text(msg: str) -> str:
     if stripped.startswith("{"):
         try:
             data = json.loads(stripped)
-            for key in ("solution", "answer", "response", "result", "text"):
+            for key in ("solution", "answer", "response", "result", "text", "s"):
                 if key in data and isinstance(data[key], str):
                     return data[key]
+            for key in ("solution", "answer", "response", "result", "text", "s"):
+                if key in data:
+                    return str(data[key])
             return stripped
         except (json.JSONDecodeError, ValueError):
             pass

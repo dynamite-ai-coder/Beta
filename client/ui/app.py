@@ -160,6 +160,12 @@ class LocalUI:
 
         @app.get("/api/browser/screenshot")
         async def browser_screenshot():
+            if self._browser_worker and self._browser_worker.is_ready:
+                png_bytes = await self._browser_worker.take_screenshot()
+                if png_bytes:
+                    import base64
+                    b64 = base64.b64encode(png_bytes).decode()
+                    return JSONResponse({"screenshot": b64, "timestamp": time.time()})
             if self._browser_preview and self._browser_worker:
                 b64 = await self._browser_preview.capture(self._browser_worker)
                 if b64:
@@ -187,6 +193,37 @@ class LocalUI:
                 return JSONResponse({"error": "Browser not ready"}, status_code=503)
             ok = await self._browser_worker.navigate(url)
             return JSONResponse({"status": "ok" if ok else "failed"})
+
+        @app.post("/api/browser/click")
+        async def browser_click(request: Request):
+            body = await request.json()
+            selector = body.get("selector", "")
+            if not selector:
+                return JSONResponse({"error": "No selector"}, status_code=400)
+            if not self._browser_worker or not self._browser_worker.is_ready:
+                return JSONResponse({"error": "Browser not ready"}, status_code=503)
+            ok = await self._browser_worker.click_element(selector)
+            return JSONResponse({"status": "ok" if ok else "failed"})
+
+        @app.post("/api/browser/type")
+        async def browser_type(request: Request):
+            body = await request.json()
+            selector = body.get("selector", "")
+            text = body.get("text", "")
+            if not selector or not text:
+                return JSONResponse({"error": "selector and text required"}, status_code=400)
+            if not self._browser_worker or not self._browser_worker.is_ready:
+                return JSONResponse({"error": "Browser not ready"}, status_code=503)
+            ok = await self._browser_worker.type_text(selector, text)
+            return JSONResponse({"status": "ok" if ok else "failed"})
+
+        @app.get("/api/browser/dom")
+        async def browser_dom():
+            if not self._browser_worker or not self._browser_worker.is_ready:
+                return JSONResponse({"error": "Browser not ready"}, status_code=503)
+            elements = await self._browser_worker.get_dom_elements()
+            url = await self._browser_worker.get_current_url()
+            return JSONResponse({"elements": elements, "url": url, "count": len(elements)})
 
         @app.get("/api/preview/tasks")
         async def preview_tasks():

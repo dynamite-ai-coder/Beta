@@ -12,6 +12,19 @@ logger = logging.getLogger(__name__)
 CLIENT_URL = "http://127.0.0.1:23400"
 
 PLUGIN_CATALOG = {
+    "browser": {
+        "description": "Browser automation via Selenium: navigate, click, type, screenshot, DOM",
+        "actions": {
+            "status": {},
+            "navigate": {"url": "string"},
+            "click": {"selector": "string"},
+            "type": {"selector": "string", "text": "string"},
+            "screenshot": {},
+            "dom": {"max_elements": "int"},
+            "get_url": {},
+            "get_source": {},
+        },
+    },
     "websearch": {
         "description": "Web search: Google, DuckDuckGo, Wikipedia, news, fetch pages",
         "actions": {

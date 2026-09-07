@@ -50,12 +50,19 @@ class Plugin(PluginBase):
 
         if self._browser_worker and self._browser_worker.is_ready:
             try:
-                b64 = await self._browser_worker.take_screenshot()
-                if b64:
+                current_url = await self._browser_worker.get_current_url()
+                if not current_url or current_url == "about:blank":
+                    await self._browser_worker.navigate(url)
+                elif current_url != url:
+                    await self._browser_worker.navigate(url)
+
+                png_bytes = await self._browser_worker.take_screenshot()
+                if png_bytes:
                     ts = int(time.time())
                     filename = name or f"screen_{ts}.png"
                     path = self._output_dir / filename
-                    path.write_bytes(base64.b64decode(b64))
+                    path.write_bytes(png_bytes)
+                    b64 = base64.b64encode(png_bytes).decode()
                     return {"screenshot": b64, "path": str(path), "filename": filename, "source": "selenium"}
             except Exception as e:
                 logger.warning(f"Selenium screenshot failed, using API: {e}")

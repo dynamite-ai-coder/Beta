@@ -76,38 +76,64 @@ class BrowserWorker:
 
     def _start_sync(self) -> bool:
         try:
+            import tempfile
             from selenium import webdriver
             from selenium.webdriver.chrome.options import Options
             from selenium.webdriver.chrome.service import Service
 
-            options = Options()
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-gpu")
-            options.add_argument("--window-size=1280,720")
-            options.add_argument("--disable-extensions")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_argument("--force-device-scale-factor=1")
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            options.add_experimental_option("useAutomationExtension", False)
-            options.add_argument(
-                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-            )
+            user_data_dir = tempfile.mkdtemp(prefix="beta_chrome_")
+
+            def _build_options(use_proxy: bool = False) -> Options:
+                opts = Options()
+                opts.binary_location = "/usr/bin/chromium-browser"
+                opts.add_argument("--headless=new")
+                opts.add_argument("--no-sandbox")
+                opts.add_argument("--disable-dev-shm-usage")
+                opts.add_argument("--disable-gpu")
+                opts.add_argument("--window-size=1280,720")
+                opts.add_argument("--disable-extensions")
+                opts.add_argument("--disable-blink-features=AutomationControlled")
+                opts.add_argument("--force-device-scale-factor=1")
+                opts.add_argument(f"--user-data-dir={user_data_dir}")
+                opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+                opts.add_experimental_option("useAutomationExtension", False)
+                opts.add_argument(
+                    "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                )
+                if use_proxy:
+                    try:
+                        from backend.browser.proxy_manager import proxy_manager
+                        if proxy_manager.enabled:
+                            entry = proxy_manager.get_next()
+                            if entry:
+                                opts.add_argument(f"--proxy-server={entry.url}")
+                                logger.info(f"Client browser proxy: {entry.ip}")
+                    except Exception:
+                        pass
+                return opts
+
+            service = Service(executable_path="/usr/bin/chromedriver")
 
             try:
-                from backend.browser.proxy_manager import proxy_manager
-                if proxy_manager.enabled:
-                    entry = proxy_manager.get_next()
-                    if entry:
-                        options.add_argument(f"--proxy-server={entry.url}")
-                        logger.info(f"Client browser proxy: {entry.ip}")
+                options = _build_options(use_proxy=True)
+                self._driver = webdriver.Chrome(service=service, options=options)
+            except Exception as proxy_err:
+                logger.warning(f"Chrome with proxy failed: {proxy_err}, retrying without proxy")
+                import shutil
+                shutil.rmtree(user_data_dir, ignore_errors=True)
+                user_data_dir = tempfile.mkdtemp(prefix="beta_chrome_")
+                options = _build_options(use_proxy=False)
+                self._driver = webdriver.Chrome(service=service, options=options)
+
+            self._driver.set_page_load_timeout(30)
+            self._driver.implicitly_wait(5)
+
+            try:
+                self._driver.get("about:blank")
             except Exception:
                 pass
 
-            self._driver = webdriver.Chrome(options=options)
-            self._driver.set_page_load_timeout(30)
-            self._driver.implicitly_wait(5)
             self._ready = True
             logger.info(f"Browser started for {self.worker_id}")
             return True

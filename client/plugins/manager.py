@@ -20,6 +20,7 @@ BUILTIN_PLUGINS = [
     "client.plugins.facesearch",
     "client.plugins.silverbullet",
     "client.plugins.aiagent",
+    "client.plugins.browser",
 ]
 
 

@@ -180,6 +180,9 @@ CLIENT_PATHS = (
     "/api/plugins",
     "/api/preview/",
     "/api/browser/",
+    "/api/browser/dom",
+    "/api/browser/click",
+    "/api/browser/type",
 )
 
 

@@ -270,7 +270,10 @@ class GroqAgentProvider:
 
                 resp.raise_for_status()
                 data = resp.json()
-                content = data["choices"][0]["message"]["content"]
+                msg = data["choices"][0]["message"]
+                content = msg.get("content", "") or ""
+                if not content and msg.get("reasoning"):
+                    content = msg["reasoning"]
                 usage = data.get("usage", {})
                 parsed = self._parse_response(content)
                 if not isinstance(parsed, dict):
